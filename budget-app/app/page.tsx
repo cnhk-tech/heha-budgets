@@ -12,8 +12,8 @@ export default function Home() {
           >
             <Image
               className="dark:invert"
-              src="/budget.svg"
-              alt="Budget logomark"
+              src="/icons/heha.svg"
+              alt="HeHa logomark"
               width={20}
               height={20}
             />
