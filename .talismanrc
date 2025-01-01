@@ -1,0 +1,4 @@
+fileignoreconfig:
+- filename: budget-app/package-lock.json
+  checksum: 2d614d661cccae91a9cfc1f1e28b3b976cc0c29d78e9663300ef26763aa5f492
+version: ""
