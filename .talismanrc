@@ -1,4 +1,10 @@
 fileignoreconfig:
 - filename: budget-app/package-lock.json
   checksum: 2d614d661cccae91a9cfc1f1e28b3b976cc0c29d78e9663300ef26763aa5f492
+- filename: budget-app/app/db/categories.ts
+  checksum: 28dda4f76fdc03de91120b24ef03ba32aeef48aee61fffdfb4c62e78310978c0
+- filename: budget-app/app/db/index.ts
+  checksum: 309a964687a0b211b4c1f3252d10f025aea542aa8d166c6f15e034f3778b9009
+- filename: budget-app/app/db/budgets.ts
+  checksum: 81a679b3a5e19bf178027b5f3683996b17e123840e7e4d0bdeaabe84215a05fc
 version: ""
