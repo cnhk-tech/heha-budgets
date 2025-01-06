@@ -6,7 +6,7 @@ const Sidebar = () => {
     <div className="w-30 place-self-center p-2 space-y-4">
       <Link
         href="/dashboard"
-        className="block rounded-md px-3 py-2 text-sm border-4 border-white hover:border-black"
+        className="block rounded-md px-3 py-2 text-sm border-4 border-foreground hover:border-background"
       >
         <Image
           className="dark:invert"
@@ -18,7 +18,7 @@ const Sidebar = () => {
       </Link>
       <Link
         href="/categories"
-        className="block rounded-md px-3 py-2 text-sm border-4 border-white hover:border-black"
+        className="block rounded-md px-3 py-2 text-sm border-4 border-foreground hover:border-background"
       >
         <Image
           className="dark:invert"
@@ -30,7 +30,7 @@ const Sidebar = () => {
       </Link>
       <Link
         href="/scanner"
-        className="block rounded-md px-3 py-2 text-sm border-4 border-white hover:border-black"
+        className="block rounded-md px-3 py-2 text-sm border-4 border-foreground hover:border-background"
       >
         <Image
           className="dark:invert"
@@ -42,7 +42,7 @@ const Sidebar = () => {
       </Link>
       <Link
         href="/budgets"
-        className="block rounded-md px-3 py-2 text-sm border-4 border-white hover:border-black"
+        className="block rounded-md px-3 py-2 text-sm border-4 border-foreground hover:border-background"
       >
         <Image
           className="dark:invert"
@@ -54,7 +54,7 @@ const Sidebar = () => {
       </Link>
       <Link
         href="#"
-        className="block rounded-md px-3 py-2 text-sm border-4 border-white hover:border-black"
+        className="block rounded-md px-3 py-2 text-sm border-4 border-foreground hover:border-background"
       >
         <Image
           className="dark:invert"

@@ -1,7 +1,7 @@
 const Page = () => {
   return (
-    <div className="w-full flex items-center justify-center bg-black p-4">
-        <p className="text-white">Dashboard</p>
+    <div className="w-full flex items-center justify-center bg-background p-4">
+        <p className="text-foreground">Dashboard</p>
     </div>
   );
 };

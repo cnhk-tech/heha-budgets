@@ -9,7 +9,7 @@ function RootLayout({
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex flex-grow h-full">
+      <main className="flex flex-grow h-full bg-foreground">
         {/* Sidebar */}
         <Sidebar />
         {/* Main content */}
