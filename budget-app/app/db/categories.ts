@@ -4,11 +4,11 @@ import { Stores } from "./types";
 const storeName = Stores.Categories;
 
 const addCategory = <T>(data: T): Promise<boolean> => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const request = indexedDB.open('myDB', DB_VERSION);
 
     request.onsuccess = () => {
-      console.log('request.onsuccess - addData', data);
+      console.log('request.onsuccess - addData');
       const db = request.result;
       const tx = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
@@ -19,8 +19,7 @@ const addCategory = <T>(data: T): Promise<boolean> => {
       };
 
       addRequest.onerror = () => {
-        alert(addRequest.error);
-        resolve(false);
+        reject(addRequest.error!);
       };
     };
 
