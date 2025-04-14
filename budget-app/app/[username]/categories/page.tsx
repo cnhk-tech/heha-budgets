@@ -27,7 +27,7 @@ const Page = () => {
   };
 
   return (
-    <div className="w-full p-4 sm:p-6 md:p-10">
+    <div className="w-full p-4 sm:p-6 md:p-10 bg-background">
       <CategoryList
         categories={categories}
         onAddCategoryClick={(categoryType: Categorytype) => {

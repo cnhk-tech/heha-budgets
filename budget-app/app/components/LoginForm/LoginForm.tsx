@@ -8,7 +8,7 @@ const LoginForm = () => {
   const router = useRouter();
 
   const handleLogin = () => {
-    router.push('/dashboard');
+    router.push(`/${username}/dashboard`);
   }
 
   useEffect(() => {
@@ -35,7 +35,7 @@ const LoginForm = () => {
           onClick={handleLogin}
           disabled={!username}
           className={`w-full py-2 px-4 font-semibold rounded-md focus:outline-none ${
-              username ? "bg-green-800 text-background hover:bg-green-700" : "bg-gray-300 text-foreground cursor-not-allowed"
+              username ? "bg-green-800 hover:bg-green-500" : "bg-gray-300 text-background cursor-not-allowed"
           }`}
         >
           Login
