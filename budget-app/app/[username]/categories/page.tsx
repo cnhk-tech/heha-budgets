@@ -34,7 +34,7 @@ export default function CategoriesPage() {
   };
 
   return (
-    <div className="w-full p-4 sm:p-6 md:p-10 bg-background min-h-screen">
+    <div className="w-full p-4 sm:p-6 md:p-10 bg-background">
       <h1 className="text-3xl font-bold mb-8 text-center">Categories</h1>
       {showAddForm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-300">

@@ -16,10 +16,10 @@ const LoginForm = () => {
   }, [username]);
 
     return (
-      <div className="w-full max-w-sm p-6 bg-foreground rounded-lg shadow-md">
-        <p className="text-lg font-semibold text-center text-background md:text-2xl">One step more to get into our App!</p>
+      <div className="w-full max-w-sm p-6 bg-foreground text-background rounded-lg shadow-md">
+        <p className="text-lg font-semibold text-center md:text-2xl">One step more to get into our App!</p>
         <div className="py-4">
-          <label htmlFor="username" className="block text-md font-medium text-background mb-2">
+          <label htmlFor="username" className="block text-md font-medium mb-2">
               User name
           </label>
           <input
@@ -35,7 +35,7 @@ const LoginForm = () => {
           onClick={handleLogin}
           disabled={!username}
           className={`w-full py-2 px-4 font-semibold rounded-md focus:outline-none ${
-              username ? "bg-green-800 hover:bg-green-500" : "bg-gray-300 text-background cursor-not-allowed"
+              username ? "bg-green-500 hover:bg-green-600" : "bg-gray-300 cursor-not-allowed"
           }`}
         >
           Login

@@ -10,16 +10,18 @@ async function RootLayout({
 }>) {
   const { username } = await params;
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
-      <main className="flex flex-grow bg-foreground max-md:flex-wrap-reverse max-md:flex-row max-md:overflow-y-auto">
-        {/* Sidebar */}
+      <div className="flex flex-1 mt-16">
         <Sidebar username={username} />
-        {/* Main content */}
-        {children}
-      </main>
+        <main className="flex-1 ml-20 p-6 max-md:ml-0 max-md:mb-20">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
-};
+}
 
 export default RootLayout;

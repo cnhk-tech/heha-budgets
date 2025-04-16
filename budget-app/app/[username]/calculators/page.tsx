@@ -14,7 +14,7 @@ const CalculatorsPage = () => {
 
   return (
     <div className="w-full p-4 sm:p-6 md:p-10 bg-background">
-      <h1 className="text-2xl font-bold mb-6 text-foreground">Financial Calculators</h1>
+      <h1 className="text-3xl font-bold mb-8 text-center">Financial Calculators</h1>
       
       <div className="flex flex-wrap gap-4 mb-8">
         {calculatorTypes.map((calc) => (
