@@ -33,6 +33,60 @@ const addCategory = <T>(data: T): Promise<boolean> => {
   });
 };
 
+const deleteCategory = (name: string): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const request = indexedDB.open('myDB', DB_VERSION);
+
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      const deleteRequest = store.delete(name);
+
+      deleteRequest.onsuccess = () => {
+        resolve(true);
+      };
+
+      deleteRequest.onerror = () => {
+        console.error(deleteRequest.error);
+        resolve(false);
+      };
+    };
+
+    request.onerror = () => {
+      console.error(request.error);
+      resolve(false);
+    };
+  });
+};
+
+const updateCategory = <T>(name: string, data: T): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const request = indexedDB.open('myDB', DB_VERSION);
+
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      const updateRequest = store.put({ ...data, name });
+
+      updateRequest.onsuccess = () => {
+        resolve(true);
+      };
+
+      updateRequest.onerror = () => {
+        console.error(updateRequest.error);
+        resolve(false);
+      };
+    };
+
+    request.onerror = () => {
+      console.error(request.error);
+      resolve(false);
+    };
+  });
+};
+
 const getCategories = <T>(conditionIndex?: string, conditionValue?: IDBValidKey): Promise<T[]> => {
   return new Promise((resolve) => {
     const request = indexedDB.open('myDB', DB_VERSION);
@@ -69,4 +123,4 @@ const getCategories = <T>(conditionIndex?: string, conditionValue?: IDBValidKey)
   });
 };
 
-export { addCategory, getCategories };
+export { addCategory, getCategories, deleteCategory, updateCategory };

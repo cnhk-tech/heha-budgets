@@ -1,51 +1,57 @@
 'use client';
 
-import { useEffect, useState } from "react";
-
-import CategoryList from "@/app/components/Category/List";
-import Add from "@/app/components/Category/Add";
-import { getCategories } from "@/app/db";
+import { useState, useEffect } from "react";
 import { Category, Categorytype } from "@/app/components/Category/types";
+import { getCategories } from "@/app/db/categories";
+import CategoryList from "@/app/components/Category/List";
+import AddCategory from "@/app/components/Category/Add";
 
-const Page = () => {
+export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [requestCategoryType, setRequestCategoryType] = useState<Categorytype>(Categorytype.Monthly);
-  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedType, setSelectedType] = useState<Categorytype | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | undefined>(undefined);
 
   const fetchCategories = async () => {
-    const data: Category[] = await getCategories();
-    setCategories(data);
+    const fetchedCategories = await getCategories() as Category[];
+    setCategories(fetchedCategories);
   };
 
   useEffect(() => {
     fetchCategories();
   }, []);
 
-  const closeAddCategory = async () => {
+  const handleAddCategoryClick = (type: Categorytype, editingCategory?: Category) => {
+    setSelectedType(type);
+    setEditingCategory(editingCategory);
+    setShowAddForm(true);
+  };
+
+  const handleCategoryUpdate = () => {
     fetchCategories();
-    setIsAddCategoryOpen(false);
+    setShowAddForm(false);
+    setEditingCategory(undefined);
   };
 
   return (
-    <div className="w-full p-4 sm:p-6 md:p-10 bg-background">
-      <CategoryList
-        categories={categories}
-        onAddCategoryClick={(categoryType: Categorytype) => {
-          setRequestCategoryType(categoryType);
-          setIsAddCategoryOpen(true);
-        }}
-      />
-
-      {isAddCategoryOpen && (
-        <div className="w-full pt-24 fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50">
-          <Add
-            requestCategoryType={requestCategoryType}
-            onClose={() => closeAddCategory()}
-          />
+    <div className="w-full p-4 sm:p-6 md:p-10 bg-background min-h-screen">
+      <h1 className="text-3xl font-bold mb-8 text-center">Categories</h1>
+      {showAddForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-300">
+          <div className="animate-fade-in-up">
+            <AddCategory
+              requestCategoryType={selectedType!}
+              onClose={handleCategoryUpdate}
+              editingCategory={editingCategory}
+            />
+          </div>
         </div>
       )}
+      <CategoryList
+        categories={categories}
+        onAddCategoryClick={handleAddCategoryClick}
+        onCategoryUpdate={handleCategoryUpdate}
+      />
     </div>
   );
 }
-
-export default Page;
