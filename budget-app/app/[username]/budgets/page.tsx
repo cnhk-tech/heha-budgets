@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from "react";
 import PastFiveYearsDropdown from "@/app/components/Dropdown/PastFiveYearsDropdown";
-import { getBudgets } from "../../db";
-import { BudgetHistory, YearlyBudgetHistory } from "./types";
+import { getBudgets } from "@/app/db";
+import { BudgetHistory } from "@/app/db/types";
+
+interface YearlyBudgetHistory {
+  month: string;
+  budget: number;
+  spent: number;
+  left: number;
+}
 
 const BudgetsPage = () => {
   const [activeYear, setActiveYear] = useState(0);

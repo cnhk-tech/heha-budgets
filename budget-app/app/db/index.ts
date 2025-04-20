@@ -1,8 +1,8 @@
 import { categories as initialCategories, budgets as initialBudgets } from '@/app/data';
-import { Stores } from './types';
 import { DB_VERSION } from './constants';
 import { addCategory, getCategories } from './categories';
-import { getBudgets } from './budgets';
+import { getBudgets, addBudget, addExpense } from './budgets';
+import { Stores } from './types';
 
 const initDB = (): Promise<boolean> => {
   let request: IDBOpenDBRequest;
@@ -18,7 +18,7 @@ const initDB = (): Promise<boolean> => {
       // if the data object store doesn't exist, create it
       if (!db.objectStoreNames.contains(Stores.Categories)) {
         console.log('Creating Categories store');
-        const objectStore = db.createObjectStore(Stores.Categories, { keyPath: 'name' });
+        const objectStore = db.createObjectStore(Stores.Categories, { keyPath: 'id' });
         objectStore.createIndex("icon", "icon", { unique: false });
         objectStore.createIndex("type", "type", { unique: false });
         initialCategories.forEach((categories) => (objectStore.add(categories)));
@@ -50,4 +50,6 @@ export {
   addCategory,
   getCategories,
   getBudgets,
+  addBudget,
+  addExpense,
 }

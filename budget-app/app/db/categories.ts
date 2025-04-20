@@ -1,9 +1,41 @@
 import { DB_VERSION } from "./constants";
-import { Stores } from "./types";
+import { Category, Stores } from "./types";
 
 const storeName = Stores.Categories;
 
-const addCategory = <T>(data: T): Promise<boolean> => {
+const getNextCategoryId = (): Promise<number> => {
+  return new Promise((resolve) => {
+    const request = indexedDB.open('myDB', DB_VERSION);
+
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const getAllRequest = store.getAll();
+
+      getAllRequest.onsuccess = () => {
+        const categories = getAllRequest.result;
+        if (categories.length === 0) {
+          resolve(1); // Start with ID 1 if no categories exist
+        } else {
+          const maxId = Math.max(...categories.map(cat => cat.id));
+          resolve(maxId + 1);
+        }
+      };
+
+      getAllRequest.onerror = () => {
+        resolve(1); // Fallback to ID 1 if error
+      };
+    };
+  });
+};
+
+const addCategory = async (category: Omit<Category, 'id'>): Promise<boolean> => {
+  const nextId = await getNextCategoryId();
+  const data = {
+    ...category,
+    id: nextId
+  };
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('myDB', DB_VERSION);
 
@@ -33,7 +65,7 @@ const addCategory = <T>(data: T): Promise<boolean> => {
   });
 };
 
-const deleteCategory = (name: string): Promise<boolean> => {
+const deleteCategory = (id: number): Promise<boolean> => {
   return new Promise((resolve) => {
     const request = indexedDB.open('myDB', DB_VERSION);
 
@@ -41,7 +73,7 @@ const deleteCategory = (name: string): Promise<boolean> => {
       const db = request.result;
       const tx = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
-      const deleteRequest = store.delete(name);
+      const deleteRequest = store.delete(id);
 
       deleteRequest.onsuccess = () => {
         resolve(true);
@@ -60,7 +92,7 @@ const deleteCategory = (name: string): Promise<boolean> => {
   });
 };
 
-const updateCategory = <T>(name: string, data: T): Promise<boolean> => {
+const updateCategory = (id: number, data: Category): Promise<boolean> => {
   return new Promise((resolve) => {
     const request = indexedDB.open('myDB', DB_VERSION);
 
@@ -68,7 +100,7 @@ const updateCategory = <T>(name: string, data: T): Promise<boolean> => {
       const db = request.result;
       const tx = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
-      const updateRequest = store.put({ ...data, name });
+      const updateRequest = store.put(data);
 
       updateRequest.onsuccess = () => {
         resolve(true);
@@ -87,7 +119,7 @@ const updateCategory = <T>(name: string, data: T): Promise<boolean> => {
   });
 };
 
-const getCategories = <T>(conditionIndex?: string, conditionValue?: IDBValidKey): Promise<T[]> => {
+const getCategories = (conditionIndex?: string, conditionValue?: IDBValidKey): Promise<Category[]> => {
   return new Promise((resolve) => {
     const request = indexedDB.open('myDB', DB_VERSION);
 
@@ -106,7 +138,7 @@ const getCategories = <T>(conditionIndex?: string, conditionValue?: IDBValidKey)
         const storeIndex = store.index(conditionIndex!);
         const cursorRequest = storeIndex.openCursor(conditionValue);
 
-        const results: T[] = [];
+        const results: Category[] = [];
 
         cursorRequest.onsuccess = () => {
           const cursor = cursorRequest.result;

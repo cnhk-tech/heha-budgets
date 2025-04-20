@@ -2,7 +2,7 @@
 
 import { useState, FormEvent, useEffect } from "react";
 import EmojiPicker, { EmojiClickData, EmojiStyle, Theme } from 'emoji-picker-react';
-import { Category, Categorytype } from "./types";
+import { Category, Categorytype } from "@/app/db/types";
 import { addCategory as addCategoryInDB, updateCategory } from "@/app/db/categories";
 
 const Add = ({ 
@@ -28,7 +28,7 @@ const Add = ({
     }
   }, [editingCategory]);
 
-  const addCategory = async (newCategory: Category) => {
+  const addCategory = async (newCategory: Omit<Category, 'id'>) => {
     try {
       setIsSubmitting(true);
       const status = await addCategoryInDB(newCategory);
@@ -45,7 +45,7 @@ const Add = ({
   const handleUpdateCategory = async (updatedCategory: Category) => {
     try {
       setIsSubmitting(true);
-      const status = await updateCategory(updatedCategory.name, updatedCategory);
+      const status = await updateCategory(updatedCategory.id, updatedCategory);
       if (status) {
         onClose();
       }
@@ -76,7 +76,7 @@ const Add = ({
 
     if (hasError) return;
 
-    const category: Category = { icon, name, type: requestCategoryType };
+    const category: Category = { icon, name, type: requestCategoryType, id: editingCategory?.id || 0 };
     
     if (editingCategory) {
       handleUpdateCategory(category);

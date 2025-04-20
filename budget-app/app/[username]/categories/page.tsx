@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { Category, Categorytype } from "@/app/components/Category/types";
+import { Category, Categorytype } from "@/app/db/types";
 import { getCategories } from "@/app/db/categories";
 import CategoryList from "@/app/components/Category/List";
 import AddCategory from "@/app/components/Category/Add";

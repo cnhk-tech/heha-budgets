@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from "react";
-import { Category, Categorytype } from "./types";
+import { Category, Categorytype } from "@/app/db/types";
 import { deleteCategory } from "@/app/db/categories";
 
 const CategoryList = ({ 
@@ -111,7 +111,7 @@ const CategoryList = ({
               </button>
               <button
                 onClick={async () => {
-                  const success = await deleteCategory(categoryToDelete.name);
+                  const success = await deleteCategory(categoryToDelete.id);
                   if (success) {
                     onCategoryUpdate();
                   }
