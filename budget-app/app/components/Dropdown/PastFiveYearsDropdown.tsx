@@ -8,7 +8,7 @@ const PastFiveYearsDropdown = ({ updateActiveYear }: { updateActiveYear: (year: 
 
   // Get the current year and generate past 5 years
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+  const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
   const handleSelectYear = (year: number) => {
     setSelectedYear(year);
