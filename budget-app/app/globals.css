@@ -4,8 +4,46 @@
 
 @layer utilities {
   .animate-fade-in-up {
-    animation: fadeInUp 0.3s ease-out forwards;
+    animation: fadeInUp 0.4s ease-out forwards;
   }
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+  .animate-scale-in {
+    animation: scaleIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+  .animate-stagger-1 { animation-delay: 0.05s; }
+  .animate-stagger-2 { animation-delay: 0.1s; }
+  .animate-stagger-3 { animation-delay: 0.15s; }
+  .animate-stagger-4 { animation-delay: 0.2s; }
+  .animate-stagger-5 { animation-delay: 0.25s; }
+  .animate-float {
+    animation: float 4s ease-in-out infinite;
+  }
+  .animate-float-delay-1 { animation-delay: 0.5s; }
+  .animate-float-delay-2 { animation-delay: 1s; }
+  .animate-float-delay-3 { animation-delay: 1.5s; }
+  .animate-glow-pulse {
+    animation: glowPulse 2.5s ease-in-out infinite;
+  }
+  .animate-shine {
+    animation: shine 2s ease-in-out infinite;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+@keyframes shine {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
 }
 
 @keyframes fadeInUp {
@@ -19,22 +57,104 @@
   }
 }
 
-:root {
-  --background: #171717;
-  --foreground: #ffffff;
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-@media (prefers-color-scheme: dark) {
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Design system: dark-first theme. Light theme only when user prefers light. */
+:root {
+  --background: #0f0f0f;
+  --foreground: #fafafa;
+  --card: #1a1a1a;
+  --card-foreground: #fafafa;
+  --muted: #737373;
+  --muted-foreground: #a3a3a3;
+  --border: #262626;
+  --accent: #22c55e;
+  --accent-foreground: #0f0f0f;
+  --ring: #22c55e;
+  --input: #262626;
+}
+
+@media (prefers-color-scheme: light) {
   :root {
-    --background: #ededed;
-    --foreground: #0a0a0a;
+    --background: #fafafa;
+    --foreground: #0f0f0f;
+    --card: #ffffff;
+    --card-foreground: #0f0f0f;
+    --muted: #a3a3a3;
+    --muted-foreground: #525252;
+    --border: #e5e5e5;
+    --accent: #16a34a;
+    --accent-foreground: #ffffff;
+    --ring: #16a34a;
+    --input: #e5e5e5;
   }
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* PWA / mobile: safe area insets for notched devices and home indicator */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.safe-left {
+  padding-left: env(safe-area-inset-left, 0);
+}
+.safe-right {
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+/* Main content padding so it clears fixed header + bottom nav (PWA) */
+.pt-header {
+  padding-top: calc(64px + env(safe-area-inset-top, 0));
+}
+.pb-bottom-nav {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0));
+}
+
+/* Hide number input spinners (up/down arrows) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Next.js portal: prevent layout/overflow issues; keep non-intrusive */
+nextjs-portal {
+  position: fixed;
+  inset: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 9999;
+}
+nextjs-portal > * {
+  pointer-events: auto;
 }
 
 /* Flip card styles */

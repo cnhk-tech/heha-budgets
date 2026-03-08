@@ -5,15 +5,17 @@ import EmojiPicker, { EmojiClickData, EmojiStyle, Theme } from 'emoji-picker-rea
 import { Category, Categorytype } from "@/app/db/types";
 import { addCategory as addCategoryInDB, updateCategory } from "@/app/db/categories";
 
-const Add = ({ 
-  requestCategoryType, 
+const Add = ({
+  requestCategoryType,
   onClose,
-  editingCategory 
-}: { 
-  requestCategoryType: Categorytype; 
+  editingCategory,
+  userId,
+}: {
+  requestCategoryType: Categorytype;
   onClose: () => void;
   editingCategory?: Category;
-})  => {
+  userId: number;
+}) => {
   const [icon, setIcon] = useState<string>("");
   const [name, setName] = useState<string>("");
   const [iconError, setIconError] = useState<string>("");
@@ -32,11 +34,9 @@ const Add = ({
     try {
       setIsSubmitting(true);
       const status = await addCategoryInDB(newCategory);
-      if (status) {
-        onClose();
-      }
+      if (status) onClose();
     } catch {
-      setNameError("Category name already exists")
+      setNameError("Category name already exists");
     } finally {
       setIsSubmitting(false);
     }
@@ -46,11 +46,9 @@ const Add = ({
     try {
       setIsSubmitting(true);
       const status = await updateCategory(updatedCategory.id, updatedCategory);
-      if (status) {
-        onClose();
-      }
+      if (status) onClose();
     } catch {
-      setNameError("Failed to update category")
+      setNameError("Failed to update category");
     } finally {
       setIsSubmitting(false);
     }
@@ -76,12 +74,18 @@ const Add = ({
 
     if (hasError) return;
 
-    const category: Category = { icon, name, type: requestCategoryType, id: editingCategory?.id || 0 };
-    
+    const category: Category = {
+      id: editingCategory?.id ?? 0,
+      userId,
+      icon,
+      name,
+      type: requestCategoryType,
+    };
+
     if (editingCategory) {
       handleUpdateCategory(category);
     } else {
-      addCategory(category);
+      addCategory({ userId, icon, name, type: requestCategoryType });
     }
   };
 
@@ -91,65 +95,68 @@ const Add = ({
   };
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
     setNameError("");
-    setName(value);
+    setName(e.target.value);
   };
 
+  const inputBase = "w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200";
+  const inputError = "border-red-500/80 focus:ring-red-500/50";
+
   return (
-    <div className="w-full max-w-lg m-12 bg-background text-foreground rounded-2xl shadow-2xl p-8 relative animate-fade-in-up">
-      <div className="absolute top-4 right-4">
-        <button
-          onClick={onClose}
-          className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
-          aria-label="Close"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-          </svg>
-        </button>
-      </div>
+    <div className="w-full max-w-lg bg-card text-card-foreground rounded-2xl shadow-2xl border border-border p-6 md:p-8 relative">
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-border/50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring"
+        aria-label="Close"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
 
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold ">
-          {editingCategory ? 'Update' : 'Add New'} {Categorytype[requestCategoryType]} Category
+        <h2 className="text-xl md:text-2xl font-bold text-foreground">
+          {editingCategory ? 'Update' : 'Add'} {Categorytype[requestCategoryType]} Category
         </h2>
-        <p className="text-gray-500 mt-2">Choose an icon and name for your category</p>
+        <p className="text-muted-foreground text-sm mt-1.5">
+          Choose an icon and name for your category
+        </p>
       </div>
-      
-      <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="space-y-6">
-          <div className="flex flex-col space-y-2">
-            <label className="text-sm font-medium ">Icon</label>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Icon</label>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className={`w-full p-4 border-2 rounded-xl flex items-center justify-center text-3xl transition-all duration-200 ${
-                  iconError 
-                    ? "border-red-500 bg-red-50" 
-                    : "border-gray-200 hover:border-blue-500 hover:bg-blue-50"
+                className={`w-full py-4 rounded-xl border-2 flex items-center justify-center text-3xl transition-all duration-200 ${
+                  iconError
+                    ? "border-red-500/80 bg-red-500/5"
+                    : "border-border bg-background hover:border-ring/50"
                 }`}
               >
                 {icon || "🌟"}
               </button>
               {showEmojiPicker && (
                 <div className="absolute z-10 mt-2 left-0 right-0">
-                  <div className="bg-white rounded-xl shadow-lg p-2">
-                    <EmojiPicker 
-                      theme={Theme.AUTO} 
-                      onEmojiClick={handleEmojiSelect} 
+                  <div className="bg-card border border-border rounded-xl shadow-xl p-2 overflow-hidden">
+                    <EmojiPicker
+                      theme={Theme.AUTO}
+                      onEmojiClick={handleEmojiSelect}
                       emojiStyle={EmojiStyle.NATIVE}
                       width={300}
-                      height={400}
-                      searchPlaceholder="Search emoji..."
+                      height={360}
+                      searchPlaceholder="Search emoji…"
                     />
                   </div>
                 </div>
               )}
               {iconError && (
-                <p className="text-red-500 text-sm mt-2 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                <p className="text-red-500 text-sm mt-2 flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                   {iconError}
@@ -158,22 +165,18 @@ const Add = ({
             </div>
           </div>
 
-          <div className="flex flex-col space-y-2">
-            <label className="text-sm font-medium ">Name</label>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Name</label>
             <input
               type="text"
               value={name}
               onChange={handleNameChange}
               placeholder="Enter category name"
-              className={`w-full p-4 border-2 rounded-xl text-background focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 ${
-                nameError 
-                  ? "border-red-500 bg-red-50" 
-                  : "border-gray-200 hover:border-blue-500"
-              }`}
+              className={`${inputBase} ${nameError ? inputError : ''}`}
             />
             {nameError && (
-              <p className="text-red-500 text-sm mt-2 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+              <p className="text-red-500 text-sm mt-2 flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
                 {nameError}
@@ -182,30 +185,28 @@ const Add = ({
           </div>
         </div>
 
-        <div className="flex justify-end space-x-4 pt-4">
+        <div className="flex gap-3 pt-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-6 py-3 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-all duration-200"
+            className="flex-1 py-3 text-sm font-medium rounded-xl border border-border bg-transparent text-foreground hover:bg-border/50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className={`px-6 py-3 text-sm font-medium text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 ${
-              isSubmitting
-                ? "bg-blue-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700"
+            className={`flex-1 py-3 text-sm font-medium rounded-xl text-accent-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card ${
+              isSubmitting ? "bg-accent/70 cursor-not-allowed" : "bg-accent hover:opacity-90"
             }`}
           >
             {isSubmitting ? (
-              <span className="flex items-center">
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                {editingCategory ? 'Updating...' : 'Adding...'}
+                {editingCategory ? 'Updating…' : 'Adding…'}
               </span>
             ) : (
               editingCategory ? 'Update' : 'Add'
@@ -215,6 +216,6 @@ const Add = ({
       </form>
     </div>
   );
-}
+};
 
 export default Add;

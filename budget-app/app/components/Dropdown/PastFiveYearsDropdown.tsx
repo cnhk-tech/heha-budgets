@@ -1,89 +1,92 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from 'react';
 
-const PastFiveYearsDropdown = ({ updateActiveYear }: { updateActiveYear: (year: number) => void }) => {
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const [isOpen, setIsOpen] = useState<boolean>(false);
+type Props = {
+  selectedYear: number;
+  onYearChange: (year: number) => void;
+};
 
-  // Get the current year and generate past 5 years
+const PastFiveYearsDropdown = ({ selectedYear, onYearChange }: Props) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleSelectYear = (year: number) => {
-    setSelectedYear(year);
-    setIsOpen(false); // Close the dropdown after selecting
-    updateActiveYear(year);
-  };
-
-  const toggleDropdown = () => {
-    setIsOpen((prev) => !prev);
-  };
-
-  const closeDropdown = () => {
+    onYearChange(year);
     setIsOpen(false);
   };
 
   return (
-    <div className="relative inline-block text-left">
-      {/* Dropdown Button */}
-      <div>
+    <div ref={containerRef} className="relative inline-block text-left">
+      <div className="flex flex-col gap-1">
+        <label htmlFor="year-dropdown" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          View year
+        </label>
         <button
-          onClick={toggleDropdown}
-          className="inline-flex justify-between items-center w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          id="dropdown-button"
+          id="year-dropdown"
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="inline-flex items-center justify-between gap-2 min-w-[140px] rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground shadow-sm hover:bg-card/80 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
           aria-expanded={isOpen}
-          aria-haspopup="true"
+          aria-haspopup="listbox"
+          aria-label="Choose a year to view budgets"
         >
-          {selectedYear ? `${selectedYear}` : "Select Year"}
+          <span>{selectedYear}</span>
           <svg
-            className={`-mr-1 ml-2 h-5 w-5 transform ${
-              isOpen ? "rotate-180" : "rotate-0"
-            } transition-transform`}
+            className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 20 20"
             fill="currentColor"
-            aria-hidden="true"
+            aria-hidden
           >
             <path
               fillRule="evenodd"
-              d="M5.293 7.707a1 1 0 011.414 0L10 11.586l3.293-3.879a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+              d="M5.293 7.293a1 1 0 011.414 0L10 11.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
               clipRule="evenodd"
             />
           </svg>
         </button>
+        <p className="text-xs text-muted-foreground">
+          Choose a year to view or edit monthly budgets
+        </p>
       </div>
 
-      {/* Dropdown Menu */}
       {isOpen && (
         <div
-          className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
-          role="menu"
-          aria-orientation="vertical"
-          aria-labelledby="dropdown-button"
+          className="absolute left-0 z-20 mt-2 w-full min-w-[140px] rounded-xl border border-border bg-card py-1 shadow-lg focus:outline-none"
+          role="listbox"
+          aria-label="Year options"
         >
-          <div className="py-1">
-            {years.map((year) => (
-              <button
-                key={year}
-                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                role="menuitem"
-                onClick={() => handleSelectYear(year)}
-              >
-                {year}
-              </button>
-            ))}
-          </div>
+          {years.map((year) => (
+            <button
+              key={year}
+              type="button"
+              role="option"
+              aria-selected={year === selectedYear}
+              onClick={() => handleSelectYear(year)}
+              className={`block w-full px-4 py-2.5 text-left text-sm transition-colors ${
+                year === selectedYear
+                  ? 'bg-accent/15 text-accent font-medium'
+                  : 'text-foreground hover:bg-border/50'
+              }`}
+            >
+              {year}
+            </button>
+          ))}
         </div>
-      )}
-
-      {/* Close the dropdown when clicking outside */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-0"
-          onClick={closeDropdown}
-          aria-hidden="true"
-        ></div>
       )}
     </div>
   );

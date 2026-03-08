@@ -1,6 +1,14 @@
 export enum Stores {
+  Users = 'users',
+  AppMeta = 'appMeta',
   Categories = 'categories',
   Budgets = 'budgets',
+}
+
+export interface User {
+  id: number;
+  name: string;
+  currency: string;
 }
 
 export enum Categorytype {
@@ -16,6 +24,7 @@ export type Budget = {
 }
 
 export interface BudgetHistory {
+  userId: number;
   year: number;
   month: string;
   budgets: Budget[];
@@ -23,6 +32,7 @@ export interface BudgetHistory {
 
 export interface Category {
   id: number;
+  userId: number;
   name: string;
   type: Categorytype;
   icon: string;

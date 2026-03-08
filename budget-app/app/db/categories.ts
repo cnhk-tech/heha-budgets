@@ -1,9 +1,11 @@
 import { DB_VERSION } from "./constants";
+import { dbReady } from "./ready";
 import { Category, Stores } from "./types";
 
 const storeName = Stores.Categories;
 
-const getNextCategoryId = (): Promise<number> => {
+const getNextCategoryId = async (): Promise<number> => {
+  await dbReady;
   return new Promise((resolve) => {
     const request = indexedDB.open('myDB', DB_VERSION);
 
@@ -31,10 +33,11 @@ const getNextCategoryId = (): Promise<number> => {
 };
 
 const addCategory = async (category: Omit<Category, 'id'>): Promise<boolean> => {
+  await dbReady;
   const nextId = await getNextCategoryId();
-  const data = {
+  const data: Category = {
     ...category,
-    id: nextId
+    id: nextId,
   };
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('myDB', DB_VERSION);
@@ -65,7 +68,8 @@ const addCategory = async (category: Omit<Category, 'id'>): Promise<boolean> => 
   });
 };
 
-const deleteCategory = (id: number): Promise<boolean> => {
+const deleteCategory = async (id: number): Promise<boolean> => {
+  await dbReady;
   return new Promise((resolve) => {
     const request = indexedDB.open('myDB', DB_VERSION);
 
@@ -92,7 +96,8 @@ const deleteCategory = (id: number): Promise<boolean> => {
   });
 };
 
-const updateCategory = (id: number, data: Category): Promise<boolean> => {
+const updateCategory = async (id: number, data: Category): Promise<boolean> => {
+  await dbReady;
   return new Promise((resolve) => {
     const request = indexedDB.open('myDB', DB_VERSION);
 
@@ -119,39 +124,30 @@ const updateCategory = (id: number, data: Category): Promise<boolean> => {
   });
 };
 
-const getCategories = (conditionIndex?: string, conditionValue?: IDBValidKey): Promise<Category[]> => {
-  return new Promise((resolve) => {
+/** Get categories for a user. */
+const getCategories = async (userId: number): Promise<Category[]> => {
+  await dbReady;
+  return new Promise((resolve, reject) => {
     const request = indexedDB.open('myDB', DB_VERSION);
-
     request.onsuccess = () => {
-    const db = request.result;
-    const tx = db.transaction(storeName, 'readonly');
-    const store = tx.objectStore(storeName);
-    if (!conditionIndex && !conditionValue) {
-        console.log('request.onsuccess - getAllData');
-        const res = store.getAll();
-        res.onsuccess = () => {
-          resolve(res.result);
-        };
-      } else {
-        console.log('request.onsuccess - getAllData based on condition');
-        const storeIndex = store.index(conditionIndex!);
-        const cursorRequest = storeIndex.openCursor(conditionValue);
-
-        const results: Category[] = [];
-
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (cursor) {
-            results.push(cursor.value);
-            cursor.continue();
-          } else {
-            resolve(results); // No more matching records
-          }
-        };
-
-      }
+      const db = request.result;
+      const tx = db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const index = store.index('userId');
+      const cursorRequest = index.openCursor(IDBKeyRange.only(userId));
+      const results: Category[] = [];
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorRequest.onerror = () => reject(cursorRequest.error);
     };
+    request.onerror = () => reject(request.error);
   });
 };
 

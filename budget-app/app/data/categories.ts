@@ -1,6 +1,6 @@
 import { Category, Categorytype } from "@/app/db/types";
 
-const categories: Category[] = [
+const categories: Omit<Category, 'userId'>[] = [
   {
     icon: "🎥",
     name: "Movie",

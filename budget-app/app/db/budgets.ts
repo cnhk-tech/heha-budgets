@@ -1,184 +1,226 @@
 import { DB_VERSION } from "./constants";
+import { dbReady } from "./ready";
 import { Budget, BudgetHistory, Stores } from "./types";
 const storeName = Stores.Budgets;
 
-const getBudgets = (conditionIndex?: string, conditionValue?: IDBValidKey): Promise<BudgetHistory[]> => {
-  return new Promise((resolve) => {
+/** Get budgets for a user. Optionally filter by 'year' or 'month'. */
+const getBudgets = async (
+  userId: number,
+  conditionIndex?: string,
+  conditionValue?: IDBValidKey
+): Promise<BudgetHistory[]> => {
+  await dbReady;
+  return new Promise((resolve, reject) => {
     const request = indexedDB.open('myDB', DB_VERSION);
-
     request.onsuccess = () => {
-      console.log('request.onsuccess - getAllData');
       const db = request.result;
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
-      if (!conditionIndex && !conditionValue) {
-        const res = store.getAll();
-        res.onsuccess = () => {
-          resolve(res.result);
-        };
-      } else {
-        const storeIndex = store.index(conditionIndex!);
-        const cursorRequest = storeIndex.openCursor(conditionValue);
+      const results: BudgetHistory[] = [];
+      const cursorRequest = store.openCursor();
 
-        const results: BudgetHistory[] = [];
-
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (cursor) {
-            results.push(cursor.value);
-            cursor.continue();
-          } else {
-            resolve(results); // No more matching records
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (cursor) {
+          const v = cursor.value;
+          if (v.userId === userId) {
+            if (!conditionIndex || !conditionValue || v[conditionIndex] === conditionValue) {
+              results.push(v);
+            }
           }
-        };
-
-      }
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      cursorRequest.onerror = () => reject(cursorRequest.error);
     };
+    request.onerror = () => reject(request.error);
   });
 };
 
-const checkCategoryExists = async (categoryId: number): Promise<boolean> => {
+const checkCategoryExists = async (categoryId: number, userId: number): Promise<boolean> => {
+  await dbReady;
   return new Promise((resolve) => {
     const request = indexedDB.open('myDB', DB_VERSION);
-
     request.onsuccess = () => {
       const db = request.result;
       const tx = db.transaction(Stores.Categories, 'readonly');
       const store = tx.objectStore(Stores.Categories);
       const getRequest = store.get(categoryId);
-
       getRequest.onsuccess = () => {
-        resolve(!!getRequest.result);
+        const cat = getRequest.result;
+        resolve(!!cat && cat.userId === userId);
       };
-
-      getRequest.onerror = () => {
-        resolve(false);
-      };
+      getRequest.onerror = () => resolve(false);
     };
-
-    request.onerror = () => {
-      resolve(false);
-    };
+    request.onerror = () => resolve(false);
   });
 };
 
-const addBudget = async (budgetCategories: Budget[]): Promise<void> => {
-  // First check if all categories exist
+const addBudget = async (budgetCategories: Budget[], userId: number): Promise<void> => {
+  const date = new Date();
+  const month = date.toLocaleString('default', { month: 'long' });
+  const year = date.getFullYear();
+  return addBudgetForMonth(budgetCategories, year, month, userId);
+};
+
+/** Add a new budget for a specific year and month. Fails if one already exists. */
+const addBudgetForMonth = async (
+  budgetCategories: Budget[],
+  year: number,
+  month: string,
+  userId: number
+): Promise<void> => {
   for (const category of budgetCategories) {
-    const exists = await checkCategoryExists(category.categoryId);
+    const exists = await checkCategoryExists(category.categoryId, userId);
     if (!exists) {
       throw new Error(`Category with ID ${category.categoryId} does not exist`);
     }
   }
 
+  await dbReady;
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('myDB', DB_VERSION);
-
     request.onsuccess = () => {
       const db = request.result;
       const tx = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
+      const key = [userId, year, month];
+      const getRequest = store.get(key);
 
-      // Get current month and year
-      const date = new Date();
-      const month = date.toLocaleString('default', { month: 'long' });
-      const year = date.getFullYear();
-
-      // Create budget entry
-      const budgetEntry: BudgetHistory = {
-        month,
-        year,
-        budgets: budgetCategories.map(category => ({
-          ...category,
-          spent: 0, // Initialize spent as 0
-          left: category.budget // Initialize left as full budget amount
-        }))
+      getRequest.onsuccess = () => {
+        if (getRequest.result) {
+          reject(new Error(`Budget for ${month} ${year} already exists`));
+          return;
+        }
+        const budgetEntry: BudgetHistory = {
+          userId,
+          month,
+          year,
+          budgets: budgetCategories.map((category) => ({
+            ...category,
+            spent: 0,
+            left: category.budget,
+          })),
+        };
+        const addRequest = store.add(budgetEntry);
+        addRequest.onsuccess = () => resolve();
+        addRequest.onerror = () => reject(new Error('Failed to add budget entry'));
       };
-
-      // Add to store
-      const addRequest = store.add(budgetEntry);
-
-      addRequest.onsuccess = () => {
-        resolve();
-      };
-
-      addRequest.onerror = () => {
-        reject(new Error('Failed to add budget entry'));
-      };
-
-      tx.oncomplete = () => {
-        db.close();
-      };
+      getRequest.onerror = () => reject(new Error('Failed to check existing budget'));
+      tx.oncomplete = () => db.close();
     };
-
-    request.onerror = () => {
-      reject(new Error('Failed to open database'));
-    };
+    request.onerror = () => reject(new Error('Failed to open database'));
   });
 };
 
-const addExpense = (year: number, month: string, categoryId: number, amount: number): Promise<void> => {
+/** Update an existing month's budgets (preserves spent, recalculates left). */
+const updateBudget = async (
+  userId: number,
+  year: number,
+  month: string,
+  budgets: Budget[]
+): Promise<void> => {
+  await dbReady;
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('myDB', DB_VERSION);
-
     request.onsuccess = () => {
       const db = request.result;
       const tx = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
+      const getRequest = store.get([userId, year, month]);
 
-      // Get the budget entry for the specified year and month
-      const getRequest = store.get([year, month]);
+      getRequest.onsuccess = () => {
+        const existing: BudgetHistory | undefined = getRequest.result;
+        if (!existing) {
+          reject(new Error(`No budget found for ${month} ${year}`));
+          return;
+        }
+        const updated: BudgetHistory = {
+          userId,
+          year,
+          month,
+          budgets: budgets.map((b) => ({
+            ...b,
+            left: b.budget - b.spent,
+          })),
+        };
+        const putRequest = store.put(updated);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = () => reject(new Error('Failed to update budget'));
+      };
+      getRequest.onerror = () => reject(new Error('Failed to get budget'));
+      tx.oncomplete = () => db.close();
+    };
+    request.onerror = () => reject(new Error('Failed to open database'));
+  });
+};
+
+const addExpense = async (
+  userId: number,
+  year: number,
+  month: string,
+  categoryId: number,
+  amount: number
+): Promise<void> => {
+  await dbReady;
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('myDB', DB_VERSION);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      const getRequest = store.get([userId, year, month]);
 
       getRequest.onsuccess = () => {
         const budgetHistory: BudgetHistory = getRequest.result;
-        
         if (!budgetHistory) {
           reject(new Error('No budget found for specified year and month'));
           return;
         }
-
-        // Find and update the category
-        const updatedBudgets = budgetHistory.budgets.map(budget => {
+        const updatedBudgets = budgetHistory.budgets.map((budget) => {
           if (budget.categoryId === categoryId) {
             const newSpent = budget.spent + amount;
             return {
               ...budget,
               spent: newSpent,
-              left: budget.budget - newSpent
+              left: budget.budget - newSpent,
             };
           }
           return budget;
         });
-
-        // Update the store with modified budgets
-        const updateRequest = store.put({
-          ...budgetHistory,
-          budgets: updatedBudgets
-        });
-
-        updateRequest.onsuccess = () => {
-          resolve();
-        };
-
-        updateRequest.onerror = () => {
-          reject(new Error('Failed to update budget with expense'));
-        };
+        store.put({ ...budgetHistory, budgets: updatedBudgets });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
       };
-
-      getRequest.onerror = () => {
-        reject(new Error('Failed to get budget entry'));
-      };
-
-      tx.oncomplete = () => {
-        db.close();
-      };
+      getRequest.onerror = () => reject(new Error('Failed to get budget entry'));
+      tx.oncomplete = () => db.close();
     };
-
-    request.onerror = () => {
-      reject(new Error('Failed to open database'));
-    };
+    request.onerror = () => reject(request.error);
   });
 };
 
 
-export { getBudgets, addBudget, addExpense };
+/** Delete all budget entries for a user (e.g. when deleting account). */
+const deleteBudgetsByUserId = async (userId: number): Promise<void> => {
+  const entries = await getBudgets(userId);
+  if (entries.length === 0) return;
+  await dbReady;
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('myDB', DB_VERSION);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      for (const entry of entries) {
+        store.delete([userId, entry.year, entry.month]);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    };
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export { getBudgets, addBudget, addBudgetForMonth, addExpense, updateBudget, deleteBudgetsByUserId };

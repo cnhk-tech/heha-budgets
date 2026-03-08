@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
+import { useCurrency } from '@/app/contexts/CurrencyContext';
 
 interface LoanPayment {
   date: Date;
@@ -9,17 +10,72 @@ interface LoanPayment {
   principal: number;
   interest: number;
   remainingBalance: number;
+  isPartPaymentMonth?: boolean;
+  partPayment?: number;
 }
 
-// interface PartialPaymentStrategy {
-//   date: Date;
-//   amount: number;
-//   interestSaved: number;
-//   tenureReduced: number;
-//   newEMI?: number;
-// }
+function buildSchedule(
+  loanAmount: number,
+  annualRate: number,
+  tenureYears: number,
+  startDate: Date,
+  partPayment?: { afterMonth: number; amount: number }
+): LoanPayment[] {
+  const monthlyRate = annualRate / 12 / 100;
+  const totalMonths = tenureYears * 12;
+  const emi =
+    (loanAmount * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) /
+    (Math.pow(1 + monthlyRate, totalMonths) - 1);
+
+  const schedule: LoanPayment[] = [];
+  let balance = loanAmount;
+  let currentDate = new Date(startDate);
+  const stopAtMonth = partPayment ? partPayment.afterMonth : totalMonths;
+
+  for (let i = 0; i < stopAtMonth && balance > 0.01; i++) {
+    const monthIndex = i + 1;
+    const interestPayment = balance * monthlyRate;
+    const principalPayment = Math.min(emi - interestPayment, balance);
+    balance -= principalPayment;
+
+    const isPartPaymentMonth = partPayment && monthIndex === partPayment.afterMonth;
+    if (isPartPaymentMonth && partPayment.amount > 0) {
+      balance -= partPayment.amount;
+      if (balance < 0) balance = 0;
+    }
+
+    schedule.push({
+      date: new Date(currentDate),
+      payment: emi,
+      principal: principalPayment,
+      interest: interestPayment,
+      remainingBalance: balance >= 0 ? balance : 0,
+      isPartPaymentMonth: !!isPartPaymentMonth,
+      partPayment: isPartPaymentMonth ? partPayment?.amount : undefined,
+    });
+
+    currentDate.setMonth(currentDate.getMonth() + 1);
+  }
+
+  while (balance > 0.01 && (schedule.length < totalMonths * 2)) {
+    const interestPayment = balance * monthlyRate;
+    const principalPayment = Math.min(emi - interestPayment, balance);
+    balance -= principalPayment;
+    schedule.push({
+      date: new Date(currentDate),
+      payment: emi,
+      principal: principalPayment,
+      interest: interestPayment,
+      remainingBalance: balance >= 0 ? balance : 0,
+    });
+    currentDate.setMonth(currentDate.getMonth() + 1);
+  }
+
+  return schedule;
+}
 
 const LoanCalculator = () => {
+  const { formatCurrency, currencySymbol } = useCurrency();
   const [loanAmount, setLoanAmount] = useState(1000000);
   const [loanAmountInput, setLoanAmountInput] = useState('1000000');
   const [interestRate, setInterestRate] = useState(8.5);
@@ -27,578 +83,353 @@ const LoanCalculator = () => {
   const [loanTenure, setLoanTenure] = useState(5);
   const [loanTenureInput, setLoanTenureInput] = useState('5');
   const [startDate, setStartDate] = useState(new Date());
-  const [payments, setPayments] = useState<LoanPayment[]>([]);
-
-  // const [lockInPeriod, setLockInPeriod] = useState(12);
-  // const [lockInPeriodInput, setLockInPeriodInput] = useState('12');
-  // const [paymentsPerYear, setPaymentsPerYear] = useState(1);
-  // const [paymentsPerYearInput, setPaymentsPerYearInput] = useState('1');
-  // const [minPartialPayment, setMinPartialPayment] = useState(5);
-  // const [minPartialPaymentInput, setMinPartialPaymentInput] = useState('5');
-  // const [preclosureCharges, setPreclosureCharges] = useState(2);
-  // const [preclosureChargesInput, setPreclosureChargesInput] = useState('2');
-
-  // const [optimizationResults, setOptimizationResults] = useState<{
-  //   strategies: PartialPaymentStrategy[];
-  //   totalInterestSaved: number;
-  //   totalTenureReduced: number;
-  // } | null>(null);
+  const [partPaymentMonth, setPartPaymentMonth] = useState<string>('');
+  const [partPaymentAmount, setPartPaymentAmount] = useState<string>('');
+  const [partPaymentApplied, setPartPaymentApplied] = useState<{ afterMonth: number; amount: number } | null>(null);
 
   const [errors, setErrors] = useState({
     loanAmount: false,
     interestRate: false,
     loanTenure: false,
-    // lockInPeriod: false,
-    // paymentsPerYear: false,
-    // minPartialPayment: false,
-    // preclosureCharges: false
   });
+
+  const totalMonths = loanTenure * 12;
+
+  const scheduleOriginal = useMemo(
+    () => buildSchedule(loanAmount, interestRate, loanTenure, startDate),
+    [loanAmount, interestRate, loanTenure, startDate]
+  );
+
+  const scheduleWithPart = useMemo(() => {
+    if (!partPaymentApplied) return null;
+    return buildSchedule(loanAmount, interestRate, loanTenure, startDate, partPaymentApplied);
+  }, [loanAmount, interestRate, loanTenure, startDate, partPaymentApplied]);
+
+  const payments = scheduleWithPart ?? scheduleOriginal;
+  const emi = payments[0]?.payment ?? 0;
+  const totalInterestOriginal = scheduleOriginal.reduce((s, p) => s + p.interest, 0);
+  const totalInterestWithPart = scheduleWithPart
+    ? scheduleWithPart.reduce((s, p) => s + p.interest, 0)
+    : totalInterestOriginal;
+  const interestSaved = totalInterestOriginal - totalInterestWithPart;
+  const monthsOriginal = scheduleOriginal.length;
+  const monthsWithPart = scheduleWithPart ? scheduleWithPart.length : monthsOriginal;
+  const monthsSaved = monthsOriginal - monthsWithPart;
 
   const handleLoanAmountChange = (value: string) => {
     setLoanAmountInput(value);
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue)) {
-      if (numValue >= 100000 && numValue <= 10000000) {
-        setLoanAmount(numValue);
-        setErrors(prev => ({ ...prev, loanAmount: false }));
-      } else {
-        setErrors(prev => ({ ...prev, loanAmount: true }));
-      }
+    const n = parseFloat(value);
+    if (!isNaN(n)) {
+      setLoanAmount(n);
+      setErrors((prev) => ({ ...prev, loanAmount: n < 100000 || n > 10000000 }));
     }
   };
-
   const handleInterestRateChange = (value: string) => {
     setInterestRateInput(value);
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue)) {
-      if (numValue >= 1 && numValue <= 30) {
-        setInterestRate(numValue);
-        setErrors(prev => ({ ...prev, interestRate: false }));
-      } else {
-        setErrors(prev => ({ ...prev, interestRate: true }));
-      }
+    const n = parseFloat(value);
+    if (!isNaN(n)) {
+      setInterestRate(n);
+      setErrors((prev) => ({ ...prev, interestRate: n < 1 || n > 30 }));
     }
   };
-
   const handleLoanTenureChange = (value: string) => {
     setLoanTenureInput(value);
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue)) {
-      if (numValue >= 1 && numValue <= 30) {
-        setLoanTenure(numValue);
-        setErrors(prev => ({ ...prev, loanTenure: false }));
-      } else {
-        setErrors(prev => ({ ...prev, loanTenure: true }));
-      }
+    const n = parseFloat(value);
+    if (!isNaN(n)) {
+      setLoanTenure(n);
+      setErrors((prev) => ({ ...prev, loanTenure: n < 1 || n > 30 }));
     }
   };
 
-  // const handleLockInPeriodChange = (value: string) => {
-  //   setLockInPeriodInput(value);
-  //   const numValue = parseFloat(value);
-  //   if (!isNaN(numValue)) {
-  //     if (numValue >= 0 && numValue <= loanTenure * 12) {
-  //       setLockInPeriod(numValue);
-  //       setErrors(prev => ({ ...prev, lockInPeriod: false }));
-  //     } else {
-  //       setErrors(prev => ({ ...prev, lockInPeriod: true }));
-  //     }
-  //   }
-  // };
-
-  // const handlePaymentsPerYearChange = (value: string) => {
-  //   setPaymentsPerYearInput(value);
-  //   const numValue = parseFloat(value);
-  //   if (!isNaN(numValue)) {
-  //     if (numValue >= 1 && numValue <= 12) {
-  //       setPaymentsPerYear(numValue);
-  //       setErrors(prev => ({ ...prev, paymentsPerYear: false }));
-  //     } else {
-  //       setErrors(prev => ({ ...prev, paymentsPerYear: true }));
-  //     }
-  //   }
-  // };
-
-  // const handleMinPartialPaymentChange = (value: string) => {
-  //   setMinPartialPaymentInput(value);
-  //   const numValue = parseFloat(value);
-  //   if (!isNaN(numValue)) {
-  //     if (numValue >= 1 && numValue <= 100) {
-  //       setMinPartialPayment(numValue);
-  //       setErrors(prev => ({ ...prev, minPartialPayment: false }));
-  //     } else {
-  //       setErrors(prev => ({ ...prev, minPartialPayment: true }));
-  //     }
-  //   }
-  // };
-
-  // const handlePreclosureChargesChange = (value: string) => {
-  //   setPreclosureChargesInput(value);
-  //   const numValue = parseFloat(value);
-  //   if (!isNaN(numValue)) {
-  //     if (numValue >= 0 && numValue <= 5) {
-  //       setPreclosureCharges(numValue);
-  //       setErrors(prev => ({ ...prev, preclosureCharges: false }));
-  //     } else {
-  //       setErrors(prev => ({ ...prev, preclosureCharges: true }));
-  //     }
-  //   }
-  // };
-
-  const calculateLoan = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    if (Object.values(errors).some(error => error)) return;
-
-    // Convert annual interest rate to monthly
-    const monthlyRate = interestRate / 12 / 100;
-    const totalMonths = loanTenure * 12;
-
-    // Calculate monthly payment using the formula:
-    // P = (PV * r * (1 + r)^n) / ((1 + r)^n - 1)
-    const monthlyPayment = (loanAmount * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / 
-      (Math.pow(1 + monthlyRate, totalMonths) - 1);
-
-    const paymentSchedule: LoanPayment[] = [];
-    let remainingBalance = loanAmount;
-    let currentDate = new Date(startDate);
-
-    for (let i = 0; i < totalMonths; i++) {
-      const interestPayment = remainingBalance * monthlyRate;
-      const principalPayment = monthlyPayment - interestPayment;
-      remainingBalance -= principalPayment;
-
-      paymentSchedule.push({
-        date: new Date(currentDate),
-        payment: monthlyPayment,
-        principal: principalPayment,
-        interest: interestPayment,
-        remainingBalance: remainingBalance > 0 ? remainingBalance : 0
-      });
-
-      // Move to next month
-      currentDate.setMonth(currentDate.getMonth() + 1);
+  const applyPartPayment = () => {
+    const month = parseInt(partPaymentMonth, 10);
+    const amount = parseFloat(partPaymentAmount.replace(/[^0-9.]/g, ''));
+    if (month >= 1 && month <= totalMonths && amount > 0) {
+      setPartPaymentApplied({ afterMonth: month, amount });
     }
-
-    setPayments(paymentSchedule);
   };
+
+  const clearPartPayment = () => {
+    setPartPaymentApplied(null);
+    setPartPaymentMonth('');
+    setPartPaymentAmount('');
+  };
+
+  const hasError = Object.values(errors).some(Boolean);
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Loan Calculator</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-6">
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold text-foreground">Loan / EMI</h2>
+      <p className="text-sm text-muted-foreground">
+        Get your monthly EMI, total interest, and full payment schedule. Add a one-time part payment to see how much you save in time and interest.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Inputs */}
+        <div className="space-y-5 rounded-xl bg-card border border-border p-5">
           <div className="space-y-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Loan Amount (₹)</label>
-                <input 
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={`w-24 p-2 border rounded-lg bg-background text-foreground text-right ${
-                    errors.loanAmount ? 'border-red-500 bg-red-50 text-black' : 'border-foreground'
-                  }`}
-                  value={loanAmountInput}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    handleLoanAmountChange(value);
-                  }}
-                />
-              </div>
-              {errors.loanAmount && (
-                <div className="text-right text-xs text-red-500">
-                  Invalid amount
-                </div>
-              )}
+            <label className="block text-sm font-medium text-foreground">Loan Amount ({currencySymbol})</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={loanAmountInput}
+                onChange={(e) => handleLoanAmountChange(e.target.value.replace(/[^0-9]/g, ''))}
+                className={`w-28 px-3 py-2 rounded-lg border bg-background text-foreground text-right font-medium ${
+                  errors.loanAmount ? 'border-rose-500' : 'border-border'
+                }`}
+              />
+              <input
+                type="range"
+                min="100000"
+                max="10000000"
+                step="100000"
+                value={loanAmount}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setLoanAmount(v);
+                  setLoanAmountInput(String(v));
+                  setErrors((prev) => ({ ...prev, loanAmount: false }));
+                }}
+                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+              />
             </div>
-            <input
-              type="range"
-              min="100000"
-              max="10000000"
-              step="100000"
-              value={loanAmount}
-              onChange={(e) => {
-                const value = e.target.value;
-                setLoanAmount(parseFloat(value));
-                setLoanAmountInput(value);
-                setErrors(prev => ({ ...prev, loanAmount: false }));
-              }}
-              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-                errors.loanAmount ? 'bg-red-200' : 'bg-gray-200'
-              }`}
-            />
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>₹1,00,000</span>
-              <span>₹1,00,00,000</span>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{formatCurrency(100000)}</span>
+              <span>{formatCurrency(10000000)}</span>
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Interest Rate (%) (Annual)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  pattern="[0-9]*\.?[0-9]*"
-                  className={`w-24 p-2 border rounded-lg bg-background text-foreground text-right ${
-                    errors.interestRate ? 'border-red-500 bg-red-50 text-black' : 'border-foreground'
-                  }`}
-                  value={interestRateInput}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9.]/g, '');
-                    const parts = value.split('.');
-                    if (parts.length <= 2) {
-                      handleInterestRateChange(value);
-                    }
-                  }}
-                />
-              </div>
-              {errors.interestRate && (
-                <div className="text-right text-xs text-red-500">
-                  Invalid rate
-                </div>
-              )}
+            <label className="block text-sm font-medium text-foreground">Interest Rate (Annual %)</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={interestRateInput}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9.]/g, '');
+                  if (v.split('.').length <= 2) handleInterestRateChange(v);
+                }}
+                className={`w-28 px-3 py-2 rounded-lg border bg-background text-foreground text-right font-medium ${
+                  errors.interestRate ? 'border-rose-500' : 'border-border'
+                }`}
+              />
+              <input
+                type="range"
+                min="1"
+                max="30"
+                step="0.1"
+                value={interestRate}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setInterestRate(v);
+                  setInterestRateInput(String(v));
+                  setErrors((prev) => ({ ...prev, interestRate: false }));
+                }}
+                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+              />
             </div>
-            <input
-              type="range"
-              min="1"
-              max="30"
-              step="0.1"
-              value={interestRate}
-              onChange={(e) => {
-                const value = e.target.value;
-                setInterestRate(parseFloat(value));
-                setInterestRateInput(value);
-                setErrors(prev => ({ ...prev, interestRate: false }));
-              }}
-              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-                errors.interestRate ? 'bg-red-200' : 'bg-gray-200'
-              }`}
-            />
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-muted-foreground">
               <span>1%</span>
               <span>30%</span>
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Loan Tenure (Years)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={`w-24 p-2 border rounded-lg bg-background text-foreground text-right ${
-                    errors.loanTenure ? 'border-red-500 bg-red-50 text-black' : 'border-foreground'
-                  }`}
-                  value={loanTenureInput}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    handleLoanTenureChange(value);
-                  }}
-                />
-              </div>
-              {errors.loanTenure && (
-                <div className="text-right text-xs text-red-500">
-                  Invalid tenure
-                </div>
-              )}
+            <label className="block text-sm font-medium text-foreground">Tenure (Years)</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={loanTenureInput}
+                onChange={(e) => handleLoanTenureChange(e.target.value.replace(/[^0-9]/g, ''))}
+                className={`w-28 px-3 py-2 rounded-lg border bg-background text-foreground text-right font-medium ${
+                  errors.loanTenure ? 'border-rose-500' : 'border-border'
+                }`}
+              />
+              <input
+                type="range"
+                min="1"
+                max="30"
+                value={loanTenure}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setLoanTenure(v);
+                  setLoanTenureInput(String(v));
+                  setErrors((prev) => ({ ...prev, loanTenure: false }));
+                }}
+                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+              />
             </div>
-            <input
-              type="range"
-              min="1"
-              max="30"
-              value={loanTenure}
-              onChange={(e) => {
-                const value = e.target.value;
-                setLoanTenure(parseFloat(value));
-                setLoanTenureInput(value);
-                setErrors(prev => ({ ...prev, loanTenure: false }));
-              }}
-              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-                errors.loanTenure ? 'bg-red-200' : 'bg-gray-200'
-              }`}
-            />
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-muted-foreground">
               <span>1 Year</span>
               <span>30 Years</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Start Date</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Start Date</label>
             <input
               type="date"
-              className="w-full p-2 border border-foreground rounded-lg bg-background text-foreground"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground"
               value={format(startDate, 'yyyy-MM-dd')}
               onChange={(e) => setStartDate(new Date(e.target.value))}
             />
           </div>
-
-          {/* Commented out optimization-related input fields */}
-          {/* <div className="space-y-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Lock-in Period (Months)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={`w-24 p-2 border rounded-lg bg-background text-foreground text-right ${
-                    errors.lockInPeriod ? 'border-red-500 bg-red-50 text-black' : 'border-foreground'
-                  }`}
-                  value={lockInPeriodInput}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    handleLockInPeriodChange(value);
-                  }}
-                />
-              </div>
-              {errors.lockInPeriod && (
-                <div className="text-right text-xs text-red-500">
-                  Invalid period
-                </div>
-              )}
-            </div>
-            <input
-              type="range"
-              min="0"
-              max={loanTenure * 12}
-              value={lockInPeriod}
-              onChange={(e) => {
-                const value = e.target.value;
-                setLockInPeriod(parseFloat(value));
-                setLockInPeriodInput(value);
-                setErrors(prev => ({ ...prev, lockInPeriod: false }));
-              }}
-              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-                errors.lockInPeriod ? 'bg-red-200' : 'bg-gray-200'
-              }`}
-            />
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>0 Months</span>
-              <span>{loanTenure * 12} Months</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Partial Payments per Year</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={`w-24 p-2 border rounded-lg bg-background text-foreground text-right ${
-                    errors.paymentsPerYear ? 'border-red-500 bg-red-50 text-black' : 'border-foreground'
-                  }`}
-                  value={paymentsPerYearInput}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    handlePaymentsPerYearChange(value);
-                  }}
-                />
-              </div>
-              {errors.paymentsPerYear && (
-                <div className="text-right text-xs text-red-500">
-                  Invalid count
-                </div>
-              )}
-            </div>
-            <input
-              type="range"
-              min="1"
-              max="12"
-              value={paymentsPerYear}
-              onChange={(e) => {
-                const value = e.target.value;
-                setPaymentsPerYear(parseFloat(value));
-                setPaymentsPerYearInput(value);
-                setErrors(prev => ({ ...prev, paymentsPerYear: false }));
-              }}
-              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-                errors.paymentsPerYear ? 'bg-red-200' : 'bg-gray-200'
-              }`}
-            />
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>1 Payment</span>
-              <span>12 Payments</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Min. Partial Payment (%)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={`w-24 p-2 border rounded-lg bg-background text-foreground text-right ${
-                    errors.minPartialPayment ? 'border-red-500 bg-red-50 text-black' : 'border-foreground'
-                  }`}
-                  value={minPartialPaymentInput}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    handleMinPartialPaymentChange(value);
-                  }}
-                />
-              </div>
-              {errors.minPartialPayment && (
-                <div className="text-right text-xs text-red-500">
-                  Invalid percentage
-                </div>
-              )}
-            </div>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              value={minPartialPayment}
-              onChange={(e) => {
-                const value = e.target.value;
-                setMinPartialPayment(parseFloat(value));
-                setMinPartialPaymentInput(value);
-                setErrors(prev => ({ ...prev, minPartialPayment: false }));
-              }}
-              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-                errors.minPartialPayment ? 'bg-red-200' : 'bg-gray-200'
-              }`}
-            />
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>1%</span>
-              <span>100%</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex flex-col gap-1">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium">Preclosure Charges (%)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={`w-24 p-2 border rounded-lg bg-background text-foreground text-right ${
-                    errors.preclosureCharges ? 'border-red-500 bg-red-50 text-black' : 'border-foreground'
-                  }`}
-                  value={preclosureChargesInput}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9.]/g, '');
-                    const parts = value.split('.');
-                    if (parts.length <= 2) {
-                      handlePreclosureChargesChange(value);
-                    }
-                  }}
-                />
-              </div>
-              {errors.preclosureCharges && (
-                <div className="text-right text-xs text-red-500">
-                  Invalid charges
-                </div>
-              )}
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="5"
-              step="0.1"
-              value={preclosureCharges}
-              onChange={(e) => {
-                const value = e.target.value;
-                setPreclosureCharges(parseFloat(value));
-                setPreclosureChargesInput(value);
-                setErrors(prev => ({ ...prev, preclosureCharges: false }));
-              }}
-              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-                errors.preclosureCharges ? 'bg-red-200' : 'bg-gray-200'
-              }`}
-            />
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>0%</span>
-              <span>5%</span>
-            </div>
-          </div> */}
-
-          <button 
-            className={`w-full py-2 rounded-lg transition-colors ${
-              Object.values(errors).some(error => error)
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-green-200 text-background border border-green-950 hover:bg-green-300'
-            }`}
-            onClick={calculateLoan}
-            disabled={Object.values(errors).some(error => error)}
-          >
-            Calculate Loan Schedule
-          </button>
         </div>
 
+        {/* Summary */}
         {payments.length > 0 && (
-          <div className="bg-background border border-foreground rounded-lg p-4">
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium mb-2">Loan Summary</h3>
-              <div className="grid grid-cols-2 gap-4 text-background">
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <p className="text-sm text-gray-600">Monthly Payment</p>
-                  <p className="text-lg font-semibold">₹{payments[0].payment.toFixed(2)}</p>
+          <div className="space-y-5">
+            <div className="rounded-xl bg-card border border-border p-5">
+              <h3 className="text-sm font-semibold text-foreground mb-3">EMI summary</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-muted/50 border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Monthly EMI</p>
+                  <p className="text-lg font-semibold text-foreground tabular-nums">{formatCurrency(emi)}</p>
                 </div>
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Interest</p>
-                  <p className="text-lg font-semibold">₹{payments.reduce((sum, p) => sum + p.interest, 0).toFixed(2)}</p>
+                <div className="rounded-lg bg-muted/50 border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Total interest</p>
+                  <p className="text-lg font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                    {formatCurrency(scheduleWithPart ? totalInterestWithPart : totalInterestOriginal)}
+                  </p>
                 </div>
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Payment</p>
-                  <p className="text-lg font-semibold">₹{(payments[0].payment * payments.length).toFixed(2)}</p>
+                <div className="col-span-2 rounded-lg bg-muted/50 border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Total payment</p>
+                  <p className="text-lg font-semibold text-foreground tabular-nums">
+                    {formatCurrency(loanAmount + (scheduleWithPart ? totalInterestWithPart : totalInterestOriginal))}
+                  </p>
                 </div>
               </div>
+            </div>
 
-              <div className="mt-6">
-                <h3 className="text-lg font-medium mb-2">Payment Schedule</h3>
-                <div className="overflow-hidden rounded-lg border border-gray-200">
-                  <div className="max-h-[400px] overflow-y-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50 text-sm font-bold sticky top-0 z-10">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-gray-500 uppercase tracking-wider">Date</th>
-                          <th className="px-6 py-3 text-left text-gray-500 uppercase tracking-wider">Payment</th>
-                          <th className="px-6 py-3 text-left text-gray-500 uppercase tracking-wider">Principal</th>
-                          <th className="px-6 py-3 text-left text-gray-500 uppercase tracking-wider">Interest</th>
-                          <th className="px-6 py-3 text-left text-gray-500 uppercase tracking-wider">Balance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {payments.map((payment, index) => (
-                          <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {format(payment.date, 'MMM yyyy')}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              ₹{payment.payment.toFixed(2)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              ₹{payment.principal.toFixed(2)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              ₹{payment.interest.toFixed(2)}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              ₹{payment.remainingBalance.toFixed(2)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+            {/* Part payment */}
+            <div className="rounded-xl bg-card border border-border p-5">
+              <h3 className="text-sm font-semibold text-foreground mb-2">Part payment (prepayment)</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                After which EMI number do you want to make a one-time part payment? Enter month (1–{totalMonths}) and amount.
+              </p>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">After month</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={totalMonths}
+                    placeholder="e.g. 12"
+                    value={partPaymentMonth}
+                    onChange={(e) => setPartPaymentMonth(e.target.value)}
+                    className="w-24 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-right"
+                  />
                 </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Amount ({currencySymbol})</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="e.g. 50000"
+                    value={partPaymentAmount}
+                    onChange={(e) => setPartPaymentAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                    className="w-32 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-right"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={applyPartPayment}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-foreground hover:opacity-90"
+                >
+                  Apply
+                </button>
+                {partPaymentApplied && (
+                  <button
+                    type="button"
+                    onClick={clearPartPayment}
+                    className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted/50"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
+              {partPaymentApplied && (
+                <div className="mt-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                  <p className="text-sm font-medium text-foreground">
+                    With part payment of {formatCurrency(partPaymentApplied.amount)} after month {partPaymentApplied.afterMonth}:
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Interest saved: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(interestSaved)}</span>
+                    {' · '}
+                    Tenure reduced: <span className="font-semibold text-foreground">{monthsSaved} months</span>
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
+
+      {/* EMI table */}
+      {payments.length > 0 && (
+        <div className="rounded-xl bg-card border border-border overflow-hidden">
+          <h3 className="text-sm font-semibold text-foreground px-4 py-3 border-b border-border">
+            Payment schedule {scheduleWithPart ? '(with part payment)' : ''}
+          </h3>
+          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+            <table className="w-full text-sm min-w-[520px]">
+              <thead className="sticky top-0 z-10 bg-card border-b-2 border-border text-muted-foreground">
+                <tr>
+                  <th className="text-left font-medium px-4 py-3">#</th>
+                  <th className="text-left font-medium px-4 py-3">Month</th>
+                  <th className="text-right font-medium px-4 py-3">EMI</th>
+                  <th className="text-right font-medium px-4 py-3">Principal</th>
+                  <th className="text-right font-medium px-4 py-3">Interest</th>
+                  <th className="text-right font-medium px-4 py-3">Balance</th>
+                  {scheduleWithPart && <th className="text-right font-medium px-4 py-3">Part pay</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {payments.map((p, i) => (
+                  <tr
+                    key={i}
+                    className={
+                      p.isPartPaymentMonth
+                        ? 'bg-accent/10'
+                        : i % 2 === 0
+                          ? 'bg-background'
+                          : 'bg-muted/20'
+                    }
+                  >
+                    <td className="px-4 py-2 text-muted-foreground">{i + 1}</td>
+                    <td className="px-4 py-2 font-medium text-foreground">{format(p.date, 'MMM yyyy')}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-foreground">{formatCurrency(p.payment)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-sky-600 dark:text-sky-400">
+                      {formatCurrency(p.principal)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-rose-600 dark:text-rose-400">
+                      {formatCurrency(p.interest)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-foreground font-medium">
+                      {formatCurrency(p.remainingBalance)}
+                    </td>
+                    {scheduleWithPart && (
+                      <td className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {p.partPayment != null ? formatCurrency(p.partPayment) : '—'}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {payments.length === 0 && !hasError && (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          Adjust loan amount, rate, and tenure above to see EMI and schedule.
+        </p>
+      )}
     </div>
   );
 };
 
-export default LoanCalculator; 
+export default LoanCalculator;
