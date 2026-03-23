@@ -1,10 +1,10 @@
 /**
  * Export profile data in an import-friendly format.
- * Produces: manifest.json, categories.json, budgets.json zipped together.
+ * Produces: manifest.json, categories.json, budgets.json, transactions.json zipped together.
  */
 
 import JSZip from 'jszip';
-import { getCategories, getBudgets } from '@/app/db';
+import { getCategories, getBudgets, getSpendingTransactions } from '@/app/db';
 import type { User } from '@/app/db/types';
 
 const SCHEMA_VERSION = 1;
@@ -35,10 +35,23 @@ export type ExportBudgetMonth = {
   budgets: ExportBudgetEntry[];
 };
 
+export type ExportTransaction = {
+  categoryId: number;
+  categoryName: string;
+  amount: number;
+  year: number;
+  month: string;
+  status: string;
+  createdAt: string;
+  upiId?: string;
+  payeeName?: string;
+};
+
 export async function exportProfileData(user: User): Promise<Blob> {
-  const [categories, budgetHistories] = await Promise.all([
+  const [categories, budgetHistories, spendingTxs] = await Promise.all([
     getCategories(user.id),
     getBudgets(user.id),
+    getSpendingTransactions(user.id),
   ]);
 
   const manifest: ExportManifest = {
@@ -65,10 +78,23 @@ export async function exportProfileData(user: User): Promise<Blob> {
     })),
   }));
 
+  const transactionsExport: ExportTransaction[] = spendingTxs.map((t) => ({
+    categoryId: t.categoryId,
+    categoryName: t.categoryName,
+    amount: t.amount,
+    year: t.year,
+    month: t.month,
+    status: t.status,
+    createdAt: t.createdAt,
+    ...(t.upiId ? { upiId: t.upiId } : {}),
+    ...(t.payeeName ? { payeeName: t.payeeName } : {}),
+  }));
+
   const zip = new JSZip();
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
   zip.file('categories.json', JSON.stringify(categoriesExport, null, 2));
   zip.file('budgets.json', JSON.stringify(budgetsExport, null, 2));
+  zip.file('transactions.json', JSON.stringify(transactionsExport, null, 2));
 
   return zip.generateAsync({ type: 'blob' });
 }

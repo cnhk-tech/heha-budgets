@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Category, Categorytype } from '@/app/db/types';
 import { getCategories, addCategory } from '@/app/db';
 import CategoryList from '@/app/components/Category/List';
 import AddCategory from '@/app/components/Category/Add';
 import { useUser } from '@/app/contexts/UserContext';
 import { parseCategoriesJson, type ExportCategory } from '@/app/lib/exportProfileData';
+import { ModalPortal } from '@/app/components/ModalPortal';
 import { useLockBodyScroll } from '@/app/hooks/useLockBodyScroll';
 
 export default function CategoriesPage() {
@@ -24,17 +25,17 @@ export default function CategoriesPage() {
   const [emptyImportWarning, setEmptyImportWarning] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     if (!user) return;
     const fetchedCategories = (await getCategories(user.id)) as Category[];
     setCategories(fetchedCategories);
-  };
+  }, [user]);
 
   useLockBodyScroll(showAddForm || !!importPreview || !!emptyImportWarning);
 
   useEffect(() => {
     fetchCategories();
-  }, [user?.id]);
+  }, [fetchCategories]);
 
   const handleAddCategoryClick = (type: Categorytype, editingCategory?: Category) => {
     setSelectedType(type);
@@ -129,7 +130,7 @@ export default function CategoriesPage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
+    <div className="w-full min-w-0 overflow-x-hidden bg-background p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-8 md:space-y-10">
         <header>
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -172,8 +173,8 @@ export default function CategoriesPage() {
         </header>
 
         {showAddForm && selectedType && (
-        <div
-          className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-[background-color,filter] duration-300 ease-out ${
+        <ModalPortal
+          className={`flex items-center justify-center p-4 transition-[background-color,filter] duration-300 ease-out ${
             isExiting ? 'bg-black/0 backdrop-blur-0' : 'bg-black/50 backdrop-blur-sm'
           }`}
         >
@@ -189,11 +190,11 @@ export default function CategoriesPage() {
               userId={user.id}
             />
           </div>
-        </div>
+        </ModalPortal>
       )}
 
         {importPreview && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+          <ModalPortal className="flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
             <div className="bg-card border border-border rounded-xl shadow-xl max-w-md w-full max-h-[85vh] flex flex-col">
               <div className="p-6 border-b border-border">
                 <h2 id="import-modal-title" className="text-lg font-semibold text-foreground">
@@ -260,11 +261,11 @@ export default function CategoriesPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalPortal>
         )}
 
         {emptyImportWarning && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="empty-import-warning-title">
+          <ModalPortal className="flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="empty-import-warning-title">
             <div className="bg-card border border-border rounded-xl shadow-xl max-w-sm w-full p-6">
               <h2 id="empty-import-warning-title" className="text-lg font-semibold text-foreground">
                 No categories in file
@@ -280,7 +281,7 @@ export default function CategoriesPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalPortal>
         )}
 
         <CategoryList

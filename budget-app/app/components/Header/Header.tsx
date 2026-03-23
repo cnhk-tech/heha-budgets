@@ -6,8 +6,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useUser } from '@/app/contexts/UserContext';
 
-const HEADER_HEIGHT = 64; // h-16, keep in sync with layout mt
-
 const Header = () => {
   const router = useRouter();
   const { logout } = useUser();
@@ -15,7 +13,7 @@ const Header = () => {
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 0);
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -27,44 +25,43 @@ const Header = () => {
   return (
     <header
       className={`
-        fixed top-0 left-0 right-0 z-50 safe-top
+        fixed top-0 left-0 right-0 z-50 w-full min-w-0
         transition-all duration-300
         ${isScrolled ? 'bg-background/95 backdrop-blur-md border-b border-border' : 'bg-background/80 backdrop-blur-sm'}
       `}
-      style={{ height: HEADER_HEIGHT }}
     >
-      <div className="h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-full">
-          {/* Logo - min touch target on mobile */}
+      <div className="pt-[env(safe-area-inset-top,0px)]">
+        <div className="relative mx-auto flex h-16 w-full min-w-0 max-w-7xl items-center justify-center px-3 sm:px-6 lg:px-8 md:justify-between">
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 min-h-[44px] min-w-[44px] sm:min-w-0 rounded-lg active:opacity-80 -ml-2 sm:ml-0 pl-2 sm:pl-0"
+            className="absolute left-1/2 top-1/2 flex min-h-[44px] min-w-0 max-w-[calc(100%-5.5rem)] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-2 rounded-lg active:opacity-80 md:static md:max-w-none md:translate-x-0 md:translate-y-0 md:justify-start"
             aria-label="HeHa Budgets home"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-foreground flex items-center justify-center shrink-0">
-              <span className="text-background font-bold text-lg sm:text-xl">H²</span>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground sm:h-10 sm:w-10">
+              <span className="text-lg font-bold text-background sm:text-xl">H²</span>
             </div>
-            <span className="text-foreground font-bold text-lg sm:text-xl hidden sm:block truncate">
+            <span className="hidden min-w-0 truncate text-base font-bold text-foreground sm:inline sm:text-xl">
               HeHa Budgets
             </span>
           </Link>
 
-          {/* Log out - top right (icon-only on mobile, icon+text on desktop) */}
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="min-w-[44px] min-h-[44px] flex items-center justify-center gap-2 rounded-xl border border-border bg-card hover:bg-muted/30 text-muted-foreground hover:text-foreground transition-colors px-3 md:px-4"
-            aria-label="Log out"
-          >
-            <Image
-              src="/icons/logout.svg"
-              alt=""
-              width={22}
-              height={22}
-              className="opacity-80 brightness-0 invert shrink-0"
-            />
-            <span className="hidden sm:inline text-sm font-medium">Log out</span>
-          </button>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[min(100%,5.5rem)] items-center justify-end pr-[max(0.75rem,env(safe-area-inset-right,0px))] md:pointer-events-auto md:static md:w-auto md:justify-end md:pr-0">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="pointer-events-auto flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-card px-2.5 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground sm:px-4"
+              aria-label="Log out"
+            >
+              <Image
+                src="/icons/logout.svg"
+                alt=""
+                width={22}
+                height={22}
+                className="shrink-0 opacity-80 brightness-0 invert"
+              />
+              <span className="hidden whitespace-nowrap text-sm font-medium sm:inline">Log out</span>
+            </button>
+          </div>
         </div>
       </div>
     </header>

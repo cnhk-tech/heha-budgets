@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { ModalPortal } from '@/app/components/ModalPortal';
 import { useLockBodyScroll } from '@/app/hooks/useLockBodyScroll';
 import { addExpense } from '@/app/db/budgets';
+import { addSpendingTransaction, buildTransactionPayload } from '@/app/db/transactions';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 
 function parseUPIString(text: string): { upiId: string; payeeName: string; amount: string } {
@@ -152,6 +154,35 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
     setStep('awaiting');
   };
 
+  const logTransaction = async (status: 'success' | 'failed') => {
+    if (
+      userId == null ||
+      categoryId == null ||
+      year == null ||
+      month == null ||
+      currentAmount <= 0
+    ) {
+      return;
+    }
+    try {
+      await addSpendingTransaction(
+        buildTransactionPayload(
+          userId,
+          categoryId,
+          categoryName ?? 'Category',
+          currentAmount,
+          year,
+          month,
+          status,
+          effectivePayeeName,
+          effectiveUpiId
+        )
+      );
+    } catch (err) {
+      console.error('Failed to log transaction', err);
+    }
+  };
+
   const handlePaymentSuccess = async () => {
     if (currentAmount <= 0) return;
     setSubmitError(null);
@@ -159,21 +190,25 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
     try {
       if (userId != null && categoryId != null && year != null && month != null) {
         await addExpense(userId, year, month, categoryId, currentAmount);
+        await logTransaction('success');
       }
       setStep('done');
       setTimeout(() => onClose(), 1500);
     } catch (e) {
+      await logTransaction('failed');
       setSubmitError(e instanceof Error ? e.message : 'Failed to record payment');
       setStep('awaiting');
     }
   };
 
-  const handlePaymentFailed = () => {
-    setStep('form');
+  const handlePaymentFailed = async () => {
+    await logTransaction('failed');
+    stopScanner();
+    onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <ModalPortal className="flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
@@ -323,7 +358,6 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
                       type="button"
                       onClick={handleResetScan}
                       className="flex-1 py-2.5 text-sm font-medium rounded-xl border border-border text-foreground"
-                      disabled={step === 'recording'}
                     >
                       Scan again
                     </button>
@@ -389,6 +423,6 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
           )}
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

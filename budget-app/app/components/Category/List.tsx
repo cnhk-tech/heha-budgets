@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Category, Categorytype } from "@/app/db/types";
 import { deleteCategory } from "@/app/db/categories";
+import { ModalPortal } from "@/app/components/ModalPortal";
 import { useLockBodyScroll } from "@/app/hooks/useLockBodyScroll";
 
 const CategoryList = ({
@@ -177,8 +178,8 @@ const CategoryList = ({
 
       {/* Delete confirmation modal */}
       {showDeleteDialog && categoryToDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
+        <ModalPortal
+          className="flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
           onClick={handleCancelDelete}
         >
           <div
@@ -214,7 +215,7 @@ const CategoryList = ({
               </button>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   );

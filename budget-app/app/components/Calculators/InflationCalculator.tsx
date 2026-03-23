@@ -35,13 +35,13 @@ const InflationCalculator = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Inflation & Future Value</h2>
+        <h2 className="text-lg sm:text-xl font-semibold text-foreground">Inflation & Future Value</h2>
         <p className="text-sm text-muted-foreground mt-1">
           See how much money you&apos;ll need in the future to have the same buying power as today.
         </p>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-5 rounded-xl bg-muted/30 border border-border p-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 min-w-0">
+        <div className="space-y-5 rounded-xl bg-muted/30 border border-border p-4 sm:p-5 min-w-0">
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">
               Amount today ({currencySymbol})
@@ -78,9 +78,9 @@ const InflationCalculator = () => {
             <p className="text-xs text-muted-foreground">Often 5–7% for long-term planning</p>
           </div>
         </div>
-        <div className="rounded-xl bg-card border border-border p-5">
+        <div className="rounded-xl bg-card border border-border p-4 sm:p-5 min-w-0">
           <h3 className="text-sm font-semibold text-foreground mb-3">Equivalent future amount</h3>
-          <p className="text-2xl font-bold text-foreground tabular-nums">
+          <p className="text-xl sm:text-2xl font-bold text-foreground tabular-nums break-words">
             {formatCurrency(Math.round(futureAmount))}
           </p>
           <p className="text-xs text-muted-foreground mt-2">

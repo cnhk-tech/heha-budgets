@@ -15,6 +15,16 @@ const initDB = (): Promise<boolean> => {
       const db = request.result;
       const oldVersion = event.oldVersion;
 
+      // --- transactions store (v4+; v5 ensures creation if missing on older v4 DBs) ---
+      if (!db.objectStoreNames.contains(Stores.Transactions)) {
+        const txStore = db.createObjectStore(Stores.Transactions, {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        txStore.createIndex('userId', 'userId', { unique: false });
+        txStore.createIndex('categoryId', 'categoryId', { unique: false });
+      }
+
       // --- v3: Users and AppMeta ---
       if (!db.objectStoreNames.contains(Stores.Users)) {
         db.createObjectStore(Stores.Users, { keyPath: 'id', autoIncrement: true });
@@ -137,8 +147,12 @@ const initDB = (): Promise<boolean> => {
   });
 };
 
-// Ensure DB is initialized as soon as the db module is first used
-initDB();
+// Browser only — Node/SSR has no indexedDB (avoids ReferenceError during `next build`)
+if (typeof indexedDB !== 'undefined') {
+  initDB();
+} else {
+  setDBReady(false);
+}
 
 export {
   initDB,
@@ -151,4 +165,10 @@ export {
   updateBudget,
   deleteBudgetsByUserId,
 };
+export {
+  addSpendingTransaction,
+  getSpendingTransactions,
+  deleteSpendingTransactionsByUserId,
+  removeSpendingTransaction,
+} from './transactions';
 export { getCurrentUser, getCurrentUserId, setCurrentUserId, getUsers, addUser, updateUser, findUserByName, getUserById, deleteUser } from './users';

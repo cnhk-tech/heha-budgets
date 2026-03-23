@@ -14,12 +14,23 @@ interface LoanPayment {
   partPayment?: number;
 }
 
+/** Part payments keyed by month (1-based). Multiple payments in same month are summed. */
+function buildPartPaymentMap(partPayments: { afterMonth: number; amount: number }[]): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const p of partPayments) {
+    if (p.afterMonth >= 1 && p.amount > 0) {
+      map.set(p.afterMonth, (map.get(p.afterMonth) ?? 0) + p.amount);
+    }
+  }
+  return map;
+}
+
 function buildSchedule(
   loanAmount: number,
   annualRate: number,
   tenureYears: number,
   startDate: Date,
-  partPayment?: { afterMonth: number; amount: number }
+  partPayments: { afterMonth: number; amount: number }[] = []
 ): LoanPayment[] {
   const monthlyRate = annualRate / 12 / 100;
   const totalMonths = tenureYears * 12;
@@ -27,10 +38,15 @@ function buildSchedule(
     (loanAmount * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) /
     (Math.pow(1 + monthlyRate, totalMonths) - 1);
 
+  const partPaymentMap = buildPartPaymentMap(partPayments);
+  const maxPartPaymentMonth = partPayments.length
+    ? Math.max(...partPayments.map((p) => p.afterMonth))
+    : 0;
+  const stopAtMonth = Math.max(totalMonths, maxPartPaymentMonth);
+
   const schedule: LoanPayment[] = [];
   let balance = loanAmount;
-  let currentDate = new Date(startDate);
-  const stopAtMonth = partPayment ? partPayment.afterMonth : totalMonths;
+  const currentDate = new Date(startDate);
 
   for (let i = 0; i < stopAtMonth && balance > 0.01; i++) {
     const monthIndex = i + 1;
@@ -38,9 +54,9 @@ function buildSchedule(
     const principalPayment = Math.min(emi - interestPayment, balance);
     balance -= principalPayment;
 
-    const isPartPaymentMonth = partPayment && monthIndex === partPayment.afterMonth;
-    if (isPartPaymentMonth && partPayment.amount > 0) {
-      balance -= partPayment.amount;
+    const partPayAmount = partPaymentMap.get(monthIndex) ?? 0;
+    if (partPayAmount > 0) {
+      balance -= partPayAmount;
       if (balance < 0) balance = 0;
     }
 
@@ -50,14 +66,14 @@ function buildSchedule(
       principal: principalPayment,
       interest: interestPayment,
       remainingBalance: balance >= 0 ? balance : 0,
-      isPartPaymentMonth: !!isPartPaymentMonth,
-      partPayment: isPartPaymentMonth ? partPayment?.amount : undefined,
+      isPartPaymentMonth: partPayAmount > 0,
+      partPayment: partPayAmount > 0 ? partPayAmount : undefined,
     });
 
     currentDate.setMonth(currentDate.getMonth() + 1);
   }
 
-  while (balance > 0.01 && (schedule.length < totalMonths * 2)) {
+  while (balance > 0.01 && schedule.length < totalMonths * 2) {
     const interestPayment = balance * monthlyRate;
     const principalPayment = Math.min(emi - interestPayment, balance);
     balance -= principalPayment;
@@ -85,7 +101,7 @@ const LoanCalculator = () => {
   const [startDate, setStartDate] = useState(new Date());
   const [partPaymentMonth, setPartPaymentMonth] = useState<string>('');
   const [partPaymentAmount, setPartPaymentAmount] = useState<string>('');
-  const [partPaymentApplied, setPartPaymentApplied] = useState<{ afterMonth: number; amount: number } | null>(null);
+  const [partPayments, setPartPayments] = useState<{ afterMonth: number; amount: number }[]>([]);
 
   const [errors, setErrors] = useState({
     loanAmount: false,
@@ -101,9 +117,9 @@ const LoanCalculator = () => {
   );
 
   const scheduleWithPart = useMemo(() => {
-    if (!partPaymentApplied) return null;
-    return buildSchedule(loanAmount, interestRate, loanTenure, startDate, partPaymentApplied);
-  }, [loanAmount, interestRate, loanTenure, startDate, partPaymentApplied]);
+    if (partPayments.length === 0) return null;
+    return buildSchedule(loanAmount, interestRate, loanTenure, startDate, partPayments);
+  }, [loanAmount, interestRate, loanTenure, startDate, partPayments]);
 
   const payments = scheduleWithPart ?? scheduleOriginal;
   const emi = payments[0]?.payment ?? 0;
@@ -141,16 +157,22 @@ const LoanCalculator = () => {
     }
   };
 
-  const applyPartPayment = () => {
+  const addPartPayment = () => {
     const month = parseInt(partPaymentMonth, 10);
     const amount = parseFloat(partPaymentAmount.replace(/[^0-9.]/g, ''));
     if (month >= 1 && month <= totalMonths && amount > 0) {
-      setPartPaymentApplied({ afterMonth: month, amount });
+      setPartPayments((prev) => [...prev, { afterMonth: month, amount }].sort((a, b) => a.afterMonth - b.afterMonth));
+      setPartPaymentMonth('');
+      setPartPaymentAmount('');
     }
   };
 
-  const clearPartPayment = () => {
-    setPartPaymentApplied(null);
+  const removePartPayment = (index: number) => {
+    setPartPayments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const clearAllPartPayments = () => {
+    setPartPayments([]);
     setPartPaymentMonth('');
     setPartPaymentAmount('');
   };
@@ -159,16 +181,16 @@ const LoanCalculator = () => {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-foreground">Loan / EMI</h2>
+      <h2 className="text-lg sm:text-xl font-semibold text-foreground">Loan / EMI</h2>
       <p className="text-sm text-muted-foreground">
-        Get your monthly EMI, total interest, and full payment schedule. Add a one-time part payment to see how much you save in time and interest.
+        Get your monthly EMI, total interest, and full payment schedule. Add multiple part payments at different months to see how much you save in time and interest.
       </p>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 min-w-0">
         {/* Inputs */}
-        <div className="space-y-5 rounded-xl bg-card border border-border p-5">
+        <div className="space-y-5 rounded-xl bg-card border border-border p-4 sm:p-5 min-w-0">
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">Loan Amount ({currencySymbol})</label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <input
                 type="text"
                 inputMode="numeric"
@@ -190,7 +212,7 @@ const LoanCalculator = () => {
                   setLoanAmountInput(String(v));
                   setErrors((prev) => ({ ...prev, loanAmount: false }));
                 }}
-                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+                className="calc-range w-full sm:flex-1"
               />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -201,7 +223,7 @@ const LoanCalculator = () => {
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">Interest Rate (Annual %)</label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <input
                 type="text"
                 inputMode="decimal"
@@ -226,7 +248,7 @@ const LoanCalculator = () => {
                   setInterestRateInput(String(v));
                   setErrors((prev) => ({ ...prev, interestRate: false }));
                 }}
-                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+                className="calc-range w-full sm:flex-1"
               />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -237,7 +259,7 @@ const LoanCalculator = () => {
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">Tenure (Years)</label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <input
                 type="text"
                 inputMode="numeric"
@@ -258,7 +280,7 @@ const LoanCalculator = () => {
                   setLoanTenureInput(String(v));
                   setErrors((prev) => ({ ...prev, loanTenure: false }));
                 }}
-                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+                className="calc-range w-full sm:flex-1"
               />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -280,8 +302,8 @@ const LoanCalculator = () => {
 
         {/* Summary */}
         {payments.length > 0 && (
-          <div className="space-y-5">
-            <div className="rounded-xl bg-card border border-border p-5">
+          <div className="space-y-4 sm:space-y-5 min-w-0">
+            <div className="rounded-xl bg-card border border-border p-4 sm:p-5 min-w-0">
               <h3 className="text-sm font-semibold text-foreground mb-3">EMI summary</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg bg-muted/50 border border-border p-3">
@@ -303,13 +325,13 @@ const LoanCalculator = () => {
               </div>
             </div>
 
-            {/* Part payment */}
-            <div className="rounded-xl bg-card border border-border p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-2">Part payment (prepayment)</h3>
+            {/* Part payments */}
+            <div className="rounded-xl bg-card border border-border p-4 sm:p-5 min-w-0">
+              <h3 className="text-sm font-semibold text-foreground mb-2">Part payments (prepayment)</h3>
               <p className="text-xs text-muted-foreground mb-3">
-                After which EMI number do you want to make a one-time part payment? Enter month (1–{totalMonths}) and amount.
+                Add one or more part payments at different months (1–{totalMonths}). Payments in the same month are combined.
               </p>
-              <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                 <div>
                   <label className="block text-xs text-muted-foreground mb-1">After month</label>
                   <input
@@ -335,32 +357,56 @@ const LoanCalculator = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={applyPartPayment}
+                  onClick={addPartPayment}
                   className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-accent-foreground hover:opacity-90"
                 >
-                  Apply
+                  Add
                 </button>
-                {partPaymentApplied && (
+                {partPayments.length > 0 && (
                   <button
                     type="button"
-                    onClick={clearPartPayment}
+                    onClick={clearAllPartPayments}
                     className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-foreground hover:bg-muted/50"
                   >
-                    Clear
+                    Clear all
                   </button>
                 )}
               </div>
-              {partPaymentApplied && (
-                <div className="mt-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                  <p className="text-sm font-medium text-foreground">
-                    With part payment of {formatCurrency(partPaymentApplied.amount)} after month {partPaymentApplied.afterMonth}:
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Interest saved: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(interestSaved)}</span>
-                    {' · '}
-                    Tenure reduced: <span className="font-semibold text-foreground">{monthsSaved} months</span>
-                  </p>
-                </div>
+              {partPayments.length > 0 && (
+                <>
+                  <ul className="mt-4 space-y-2">
+                    {partPayments.map((p, idx) => (
+                      <li
+                        key={`${p.afterMonth}-${p.amount}-${idx}`}
+                        className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-muted/50 border border-border"
+                      >
+                        <span className="text-sm text-foreground">
+                          Month {p.afterMonth}: {formatCurrency(p.amount)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removePartPayment(idx)}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          aria-label={`Remove part payment at month ${p.afterMonth}`}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                    <p className="text-sm font-medium text-foreground">
+                      With {partPayments.length} part payment{partPayments.length === 1 ? '' : 's'}:
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Interest saved: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(interestSaved)}</span>
+                      {' · '}
+                      Tenure reduced: <span className="font-semibold text-foreground">{monthsSaved} months</span>
+                    </p>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -371,9 +417,9 @@ const LoanCalculator = () => {
       {payments.length > 0 && (
         <div className="rounded-xl bg-card border border-border overflow-hidden">
           <h3 className="text-sm font-semibold text-foreground px-4 py-3 border-b border-border">
-            Payment schedule {scheduleWithPart ? '(with part payment)' : ''}
+            Payment schedule {scheduleWithPart ? `(with ${partPayments.length} part payment${partPayments.length === 1 ? '' : 's'})` : ''}
           </h3>
-          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+          <div className="overflow-x-auto max-h-[420px] overflow-y-auto -mx-1 px-1 sm:mx-0 sm:px-0">
             <table className="w-full text-sm min-w-[520px]">
               <thead className="sticky top-0 z-10 bg-card border-b-2 border-border text-muted-foreground">
                 <tr>

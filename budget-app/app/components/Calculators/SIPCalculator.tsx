@@ -100,22 +100,20 @@ const SIPCalculator = () => {
     }
   };
 
-  const hasError = Object.values(errors).some(Boolean);
-
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-foreground">SIP (Monthly investment)</h2>
+      <h2 className="text-lg sm:text-xl font-semibold text-foreground">SIP (Monthly investment)</h2>
       <p className="text-sm text-muted-foreground">
         See how regular monthly investments grow over time with compound returns. Use the table below for a year-wise view.
       </p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Inputs */}
-        <div className="space-y-5 rounded-xl bg-card border border-border p-5">
+        <div className="space-y-5 rounded-xl bg-card border border-border p-4 sm:p-5 min-w-0">
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">
               Monthly Investment ({currencySymbol})
             </label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <input
                 type="text"
                 inputMode="numeric"
@@ -137,7 +135,7 @@ const SIPCalculator = () => {
                   setMonthlyInvestmentInput(String(v));
                   setErrors((prev) => ({ ...prev, monthlyInvestment: false }));
                 }}
-                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+                className="calc-range w-full sm:flex-1"
               />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -148,7 +146,7 @@ const SIPCalculator = () => {
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">Investment Period (Years)</label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <input
                 type="text"
                 inputMode="numeric"
@@ -169,7 +167,7 @@ const SIPCalculator = () => {
                   setInvestmentPeriodInput(String(v));
                   setErrors((prev) => ({ ...prev, investmentPeriod: false }));
                 }}
-                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+                className="calc-range w-full sm:flex-1"
               />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -180,7 +178,7 @@ const SIPCalculator = () => {
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">Expected Return (Annual %)</label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <input
                 type="text"
                 inputMode="decimal"
@@ -205,7 +203,7 @@ const SIPCalculator = () => {
                   setReturnRateInput(String(v));
                   setErrors((prev) => ({ ...prev, returnRate: false }));
                 }}
-                className="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-accent"
+                className="calc-range w-full sm:flex-1"
               />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -216,8 +214,8 @@ const SIPCalculator = () => {
         </div>
 
         {/* Results & projections */}
-        <div className="space-y-5">
-          <div className="rounded-xl bg-card border border-border p-5">
+        <div className="space-y-5 min-w-0">
+          <div className="rounded-xl bg-card border border-border p-4 sm:p-5 min-w-0">
             <h3 className="text-sm font-semibold text-foreground mb-3">Summary at maturity</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-muted/50 border border-border p-3">
@@ -247,8 +245,8 @@ const SIPCalculator = () => {
               <h3 className="text-sm font-semibold text-foreground px-4 py-3 border-b border-border">
                 Year-wise projection
               </h3>
-              <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto max-h-[280px] overflow-y-auto -mx-1 px-1 sm:mx-0 sm:px-0">
+                <table className="w-full text-sm min-w-[340px]">
                   <thead className="sticky top-0 z-10 bg-card border-b-2 border-border text-muted-foreground">
                     <tr>
                       <th className="text-left font-medium px-4 py-2">Year</th>

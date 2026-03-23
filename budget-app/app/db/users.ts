@@ -134,7 +134,8 @@ export async function findUserByName(name: string): Promise<User | null> {
 
 export async function deleteUser(userId: number): Promise<void> {
   const { getCategories, deleteCategory } = await import('./categories');
-  const { getBudgets, deleteBudgetsByUserId } = await import('./budgets');
+  const { deleteBudgetsByUserId } = await import('./budgets');
+  const { deleteSpendingTransactionsByUserId } = await import('./transactions');
   const currentId = await getCurrentUserId();
   if (currentId === userId) {
     await setCurrentUserId(null);
@@ -144,6 +145,7 @@ export async function deleteUser(userId: number): Promise<void> {
     await deleteCategory(cat.id);
   }
   await deleteBudgetsByUserId(userId);
+  await deleteSpendingTransactionsByUserId(userId);
   await dbReady;
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('myDB', DB_VERSION);
@@ -158,3 +160,5 @@ export async function deleteUser(userId: number): Promise<void> {
     request.onerror = () => reject(request.error);
   });
 }
+
+export type { User } from './types';

@@ -49,13 +49,13 @@ const EmergencyFundCalculator = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Emergency Fund</h2>
+        <h2 className="text-lg sm:text-xl font-semibold text-foreground">Emergency Fund</h2>
         <p className="text-sm text-muted-foreground mt-1">
           How much to keep aside so you can cover expenses for a few months if income stops.
         </p>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-5 rounded-xl bg-muted/30 border border-border p-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 min-w-0">
+        <div className="space-y-5 rounded-xl bg-muted/30 border border-border p-4 sm:p-5 min-w-0">
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">
               Monthly expenses ({currencySymbol})
@@ -114,10 +114,10 @@ const EmergencyFundCalculator = () => {
             />
           </div>
         </div>
-        <div className="space-y-4">
-          <div className="rounded-xl bg-card border border-border p-5">
+        <div className="space-y-4 min-w-0">
+          <div className="rounded-xl bg-card border border-border p-4 sm:p-5 min-w-0">
             <h3 className="text-sm font-semibold text-foreground mb-3">Your target</h3>
-            <p className="text-2xl font-bold text-foreground tabular-nums">
+            <p className="text-xl sm:text-2xl font-bold text-foreground tabular-nums break-words">
               {formatCurrency(targetCorpus)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -125,9 +125,9 @@ const EmergencyFundCalculator = () => {
             </p>
           </div>
           {currentSavings > 0 && (
-            <div className="rounded-xl bg-card border border-border p-5">
+            <div className="rounded-xl bg-card border border-border p-4 sm:p-5 min-w-0">
               <h3 className="text-sm font-semibold text-foreground mb-3">Gap & timeline</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Shortfall</p>
                   <p className="text-lg font-semibold text-foreground tabular-nums">

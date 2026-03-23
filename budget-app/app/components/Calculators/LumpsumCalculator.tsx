@@ -37,13 +37,13 @@ const LumpsumCalculator = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Lumpsum Investment</h2>
+        <h2 className="text-lg sm:text-xl font-semibold text-foreground">Lumpsum Investment</h2>
         <p className="text-sm text-muted-foreground mt-1">
           One-time investment: see how much it can grow over time with compound returns.
         </p>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-5 rounded-xl bg-muted/30 border border-border p-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 min-w-0">
+        <div className="space-y-5 rounded-xl bg-muted/30 border border-border p-4 sm:p-5 min-w-0">
           <div className="space-y-2">
             <label className="block text-sm font-medium text-foreground">
               Invest amount ({currencySymbol})
@@ -79,7 +79,7 @@ const LumpsumCalculator = () => {
             />
           </div>
         </div>
-        <div className="rounded-xl bg-card border border-border p-5 space-y-4">
+        <div className="rounded-xl bg-card border border-border p-4 sm:p-5 space-y-4 min-w-0">
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-2">Estimated value</h3>
             <p className="text-2xl font-bold text-foreground tabular-nums">

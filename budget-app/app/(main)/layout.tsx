@@ -30,15 +30,15 @@ function MainLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <CurrencyProvider>
-      <div className="min-h-screen flex flex-col bg-background">
+      <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
         <Header />
-        <div className="flex flex-1 pt-header">
+        <div className="flex min-h-0 min-w-0 flex-1 pt-header w-full">
           <Sidebar />
           <main
-            className="flex-1 md:ml-20 p-4 sm:p-6 pb-bottom-nav md:pb-6"
+            className="flex min-h-0 min-w-0 flex-1 md:ml-16 lg:ml-20 p-4 sm:p-6 pb-bottom-nav md:pb-6"
             id="main-content"
           >
-            <div className="max-w-7xl mx-auto">
+            <div className="max-w-7xl mx-auto min-w-0 w-full">
               {children}
             </div>
           </main>

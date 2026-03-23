@@ -6,6 +6,7 @@ import { useUser } from '@/app/contexts/UserContext';
 import { useCurrency, CURRENCIES, type CurrencyCode } from '@/app/contexts/CurrencyContext';
 import { exportProfileData, downloadBlob, getExportFilename } from '@/app/lib/exportProfileData';
 import { deleteUser } from '@/app/db';
+import { ModalPortal } from '@/app/components/ModalPortal';
 import { useLockBodyScroll } from '@/app/hooks/useLockBodyScroll';
 
 export default function ProfilePage() {
@@ -64,7 +65,8 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 md:space-y-10">
+    <div className="w-full min-w-0 overflow-x-hidden bg-background p-4 md:p-8">
+      <div className="max-w-5xl mx-auto space-y-8 md:space-y-10">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">Profile</h1>
         <p className="text-muted-foreground mt-1 text-sm md:text-base max-w-xl">Your account and display preferences</p>
@@ -154,7 +156,7 @@ export default function ProfilePage() {
       </div>
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
+        <ModalPortal className="flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
           <div className="bg-card border border-border rounded-xl shadow-xl max-w-md w-full p-6">
             <h2 id="delete-account-title" className="text-lg font-semibold text-foreground">
               Delete account?
@@ -200,8 +202,9 @@ export default function ProfilePage() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
+      </div>
     </div>
   );
 }
