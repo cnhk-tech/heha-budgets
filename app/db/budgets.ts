@@ -193,4 +193,46 @@ const deleteBudgetsByUserId = async (userId: number): Promise<void> => {
   });
 };
 
-export { getBudgets, addBudget, addBudgetForMonth, addExpense, updateBudget, deleteBudgetsByUserId };
+/** Import a budget month — creates if missing, overwrites if present. */
+const importBudgetForMonth = async (
+  budgetCategories: Budget[],
+  year: number,
+  month: string,
+  userId: number
+): Promise<void> => {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    const entry: BudgetHistory = {
+      userId,
+      year,
+      month,
+      budgets: budgetCategories.map((b) => ({
+        ...b,
+        left: b.budget - b.spent,
+      })),
+    };
+    const putRequest = store.put(entry);
+    putRequest.onsuccess = () => resolve();
+    putRequest.onerror = () => reject(new Error('Failed to import budget entry'));
+  });
+};
+
+/** Check if a budget exists for a given userId/year/month. */
+const hasBudgetForMonth = async (
+  userId: number,
+  year: number,
+  month: string
+): Promise<boolean> => {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const store = tx.objectStore(storeName);
+    const getReq = store.get([userId, year, month]);
+    getReq.onsuccess = () => resolve(!!getReq.result);
+    getReq.onerror = () => reject(getReq.error);
+  });
+};
+
+export { getBudgets, addBudget, addBudgetForMonth, addExpense, updateBudget, deleteBudgetsByUserId, importBudgetForMonth, hasBudgetForMonth };

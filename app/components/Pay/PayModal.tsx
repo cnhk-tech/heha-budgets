@@ -10,7 +10,7 @@ import {
   parseUPIString,
   buildUpiPayUrl,
   openUpiDeepLink,
-  makeUpiTransactionRef,
+  patchAmountOnCleanUrl,
 } from '@/app/lib/upi';
 
 type PayMode = 'scan' | 'upi';
@@ -74,12 +74,13 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
   const [mode, setMode] = useState<PayMode>('scan');
   const [step, setStep] = useState<PayStep>('form');
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
   const [securePayContext, setSecurePayContext] = useState(true);
   const [scanResult, setScanResult] = useState<{
     upiId: string;
     payeeName: string;
     amount: string;
+    cleanUrl: string;
   } | null>(null);
   const [amount, setAmount] = useState('');
   const [upiId, setUpiId] = useState('');
@@ -237,26 +238,13 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
 
   const canOpenUpi = currentAmount > 0 && effectiveUpiId.length > 0;
 
-  const transactionRef = useMemo(
-    () => makeUpiTransactionRef(),
-    [effectiveUpiId, effectivePayeeName, amountStr, categoryName, mode]
-  );
-
   const upiIntentUrl = useMemo(() => {
     if (!canOpenUpi) return '';
-    const note = categoryName ? `H2 · ${categoryName}` : 'H2 budget';
-    // Manual VPA: P2P-style link — no merchant QR fields; see buildUpiPayUrl p2pManual.
-    if (mode === 'upi') {
-      return buildUpiPayUrl(effectiveUpiId, effectivePayeeName, amountStr, {
-        note,
-        p2pManual: true,
-      });
+    if (mode === 'scan' && scanResult?.cleanUrl) {
+      return patchAmountOnCleanUrl(scanResult.cleanUrl, amountStr);
     }
-    return buildUpiPayUrl(effectiveUpiId, effectivePayeeName, amountStr, {
-      note,
-      transactionRef,
-    });
-  }, [canOpenUpi, effectiveUpiId, effectivePayeeName, amountStr, categoryName, transactionRef, mode]);
+    return buildUpiPayUrl(effectiveUpiId, effectivePayeeName, amountStr);
+  }, [canOpenUpi, mode, scanResult, effectiveUpiId, effectivePayeeName, amountStr]);
 
   const handleOpenInPaymentApp = () => {
     if (!upiIntentUrl) return;
@@ -265,17 +253,14 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
     setStep('awaiting');
   };
 
-  const handleCopyUpiLink = async () => {
-    if (!upiIntentUrl) return;
-    setSubmitError(null);
+  const handleCopyUpiId = async () => {
+    if (!effectiveUpiId) return;
     try {
-      await navigator.clipboard.writeText(upiIntentUrl);
-      setLinkCopied(true);
-      window.setTimeout(() => setLinkCopied(false), 2500);
+      await navigator.clipboard.writeText(effectiveUpiId);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
     } catch {
-      setSubmitError(
-        'Could not copy. Use HTTPS, try Chrome/Safari, or enter this UPI ID manually in your payment app.'
-      );
+      // clipboard not available
     }
   };
 
@@ -396,7 +381,7 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
                     disabled={!upiIntentUrl}
                     className="w-full py-2.5 text-sm font-medium rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Open payment app again
+                    Pay again
                   </button>
                   <p className="text-center text-xs text-muted-foreground">
                     Use this if the app closed when you tapped outside it, or you need another try.
@@ -501,15 +486,27 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
                   )}
                 </>
               ) : (
-                <div className="bg-background border border-border rounded-xl p-4 space-y-3">
-                  <p className="text-sm font-medium text-muted-foreground">Scanned</p>
-                  <p className="text-sm text-foreground break-all">{scanResult.upiId}</p>
-                  {!hasValidScannedAmount && (
+                <div className="bg-background border border-border rounded-2xl p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Payee</p>
+                      <p className="text-sm text-foreground break-all leading-snug">{scanResult.upiId}</p>
+                      {scanResult.payeeName && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{scanResult.payeeName}</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetScan}
+                      className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
+                    >
+                      Scan again
+                    </button>
+                  </div>
+
+                  {!hasValidScannedAmount ? (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        This QR didn&apos;t include a payment amount, or the amount was zero. Enter how much you&apos;re paying.
-                      </p>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1">Amount ({currencySymbol})</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Amount ({currencySymbol})</label>
                       <input
                         type="number"
                         min="0"
@@ -517,49 +514,45 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
                         inputMode="decimal"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
-                        placeholder="Enter amount"
-                        className="w-full px-4 py-2.5 rounded-xl bg-card border border-border text-foreground focus:ring-2 focus:ring-ring"
+                        placeholder="0.00"
+                        className="w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground text-lg font-semibold focus:ring-2 focus:ring-ring"
                         autoFocus
                       />
                     </div>
+                  ) : (
+                    <div className="text-center py-1">
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Amount</p>
+                      <p className="text-2xl font-bold text-foreground">{formatCurrency(scannedAmountParsed)}</p>
+                    </div>
                   )}
-                  {hasValidScannedAmount && (
-                    <p className="text-lg font-semibold text-foreground">{formatCurrency(scannedAmountParsed)}</p>
-                  )}
+
                   {isOverBudget && (
                     <div className="rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 py-3">
                       <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
-                        This amount exceeds your remaining budget by {formatCurrency(overBy)}. You can still pay; this category will show a negative balance.
+                        Exceeds budget by {formatCurrency(overBy)}
                       </p>
                     </div>
                   )}
                   {submitError && (
                     <p className="text-sm text-rose-600 dark:text-rose-400">{submitError}</p>
                   )}
-                  <div className="flex gap-2">
+
+                  <button
+                    type="button"
+                    onClick={handleOpenInPaymentApp}
+                    className="w-full py-3.5 text-sm font-semibold rounded-xl bg-accent text-accent-foreground shadow-lg shadow-accent/20 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+                    disabled={!upiIntentUrl}
+                  >
+                    Pay now{currentAmount > 0 ? ` — ${formatCurrency(currentAmount)}` : ''}
+                  </button>
+
+                  {effectiveUpiId && (
                     <button
                       type="button"
-                      onClick={handleResetScan}
-                      className="flex-1 py-2.5 text-sm font-medium rounded-xl border border-border text-foreground"
+                      onClick={handleCopyUpiId}
+                      className="w-full py-2.5 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
                     >
-                      Scan again
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleOpenInPaymentApp}
-                      className="flex-1 py-2.5 text-sm font-medium rounded-xl bg-accent text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!upiIntentUrl}
-                    >
-                      Open in payment app
-                    </button>
-                  </div>
-                  {upiIntentUrl && (
-                    <button
-                      type="button"
-                      onClick={handleCopyUpiLink}
-                      className="w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl border border-border/60 bg-transparent"
-                    >
-                      {linkCopied ? 'Payment link copied' : 'Copy payment link (if app did not open)'}
+                      {copiedId ? 'Copied!' : `Copy UPI ID — ${effectiveUpiId}`}
                     </button>
                   )}
                 </div>
@@ -568,36 +561,35 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
           )}
 
           {mode === 'upi' && (
-            <div className="space-y-4">
+            <div className="bg-background border border-border rounded-2xl p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Amount ({currencySymbol})</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">UPI ID</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">UPI ID</label>
                 <input
                   type="text"
                   value={upiId}
                   onChange={(e) => setUpiId(e.target.value)}
                   placeholder="name@upi"
-                  className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground focus:ring-2 focus:ring-ring"
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground focus:ring-2 focus:ring-ring"
                 />
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  Opens a standard person-to-person UPI request (no merchant QR fields). The payee label uses your VPA if a name isn&apos;t provided.
-                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Amount ({currencySymbol})</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground text-lg font-semibold focus:ring-2 focus:ring-ring"
+                />
               </div>
               {isOverBudget && (
                 <div className="rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 py-3">
                   <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
-                    This amount exceeds your remaining budget by {formatCurrency(overBy)}. You can still pay; this category will show a negative balance.
+                    Exceeds budget by {formatCurrency(overBy)}
                   </p>
                 </div>
               )}
@@ -608,19 +600,10 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
                 type="button"
                 onClick={handleOpenInPaymentApp}
                 disabled={!upiIntentUrl}
-                className="w-full py-3 text-sm font-medium rounded-xl bg-accent text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3.5 text-sm font-semibold rounded-xl bg-accent text-accent-foreground shadow-lg shadow-accent/20 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
               >
-                Open in payment app — {formatCurrency(parseFloat(amount) || 0)}
+                Pay now{currentAmount > 0 ? ` — ${formatCurrency(currentAmount)}` : ''}
               </button>
-              {upiIntentUrl && (
-                <button
-                  type="button"
-                  onClick={handleCopyUpiLink}
-                  className="w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-xl border border-border/60 bg-transparent"
-                >
-                  {linkCopied ? 'Payment link copied' : 'Copy payment link (if app did not open)'}
-                </button>
-              )}
             </div>
           )}
             </>

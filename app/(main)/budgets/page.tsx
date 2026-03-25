@@ -482,6 +482,7 @@ const BudgetsPage = () => {
                 />
               </ModalPortal>
             )}
+
           </>
         )}
       </div>

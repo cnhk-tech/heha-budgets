@@ -2,7 +2,7 @@ import { DB_VERSION } from './constants';
 import { registerDbConnection } from './connection';
 import { setDBReady } from './ready';
 import { addCategory, getCategories } from './categories';
-import { getBudgets, addBudget, addBudgetForMonth, addExpense, updateBudget, deleteBudgetsByUserId } from './budgets';
+import { getBudgets, addBudget, addBudgetForMonth, addExpense, updateBudget, deleteBudgetsByUserId, importBudgetForMonth, hasBudgetForMonth } from './budgets';
 import { Stores } from './types';
 
 const BUDGETS_TEMP = 'BudgetsV3Temp';
@@ -150,6 +150,8 @@ export {
   addExpense,
   updateBudget,
   deleteBudgetsByUserId,
+  importBudgetForMonth,
+  hasBudgetForMonth,
 };
 export {
   addSpendingTransaction,

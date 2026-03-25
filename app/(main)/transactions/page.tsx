@@ -412,6 +412,7 @@ export default function TransactionsPage() {
           </div>
         </ModalPortal>
       )}
+
     </div>
   );
 }

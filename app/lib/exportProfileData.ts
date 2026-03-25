@@ -144,6 +144,81 @@ export async function parseExportZip(file: File): Promise<{
 }
 
 /**
+ * Parse a budgets.json (from export zip or standalone).
+ * Returns structured array matching ExportBudgetMonth[].
+ */
+export async function parseBudgetsJson(file: File): Promise<ExportBudgetMonth[]> {
+  const text = await file.text();
+  const data = JSON.parse(text);
+  if (!Array.isArray(data)) {
+    throw new Error('JSON file must contain an array of budget months.');
+  }
+  return data.map((item: unknown, index: number) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`Invalid budget entry at position ${index}.`);
+    }
+    const o = item as Record<string, unknown>;
+    const year = typeof o.year === 'number' ? o.year : NaN;
+    const month = typeof o.month === 'string' ? o.month.trim() : '';
+    if (!year || !month) {
+      throw new Error(`Budget at position ${index} is missing year or month.`);
+    }
+    if (!Array.isArray(o.budgets)) {
+      throw new Error(`Budget at position ${index} has no budgets array.`);
+    }
+    const budgets: ExportBudgetEntry[] = (o.budgets as unknown[]).map((b: unknown) => {
+      const bo = b as Record<string, unknown>;
+      return {
+        categoryId: typeof bo.categoryId === 'number' ? bo.categoryId : 0,
+        budget: typeof bo.budget === 'number' ? bo.budget : 0,
+        spent: typeof bo.spent === 'number' ? bo.spent : 0,
+        left: typeof bo.left === 'number' ? bo.left : 0,
+      };
+    });
+    return { year, month, budgets };
+  });
+}
+
+/**
+ * Parse a transactions.json (from export zip or standalone).
+ * Returns structured array matching ExportTransaction[].
+ */
+export async function parseTransactionsJson(file: File): Promise<ExportTransaction[]> {
+  const text = await file.text();
+  const data = JSON.parse(text);
+  if (!Array.isArray(data)) {
+    throw new Error('JSON file must contain an array of transactions.');
+  }
+  return data.map((item: unknown, index: number) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`Invalid transaction at position ${index}.`);
+    }
+    const o = item as Record<string, unknown>;
+    const categoryId = typeof o.categoryId === 'number' ? o.categoryId : 0;
+    const categoryName = typeof o.categoryName === 'string' ? o.categoryName : 'Category';
+    const amount = typeof o.amount === 'number' ? o.amount : 0;
+    const year = typeof o.year === 'number' ? o.year : NaN;
+    const month = typeof o.month === 'string' ? o.month.trim() : '';
+    const status = typeof o.status === 'string' ? o.status : 'success';
+    const createdAt = typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString();
+    if (!year || !month || amount <= 0) {
+      throw new Error(`Transaction at position ${index} has missing/invalid year, month, or amount.`);
+    }
+    return {
+      categoryId,
+      categoryName,
+      amount,
+      year,
+      month,
+      status,
+      createdAt,
+      ...(typeof o.upiId === 'string' && o.upiId.trim() ? { upiId: o.upiId.trim() } : {}),
+      ...(typeof o.payeeName === 'string' && o.payeeName.trim() ? { payeeName: o.payeeName.trim() } : {}),
+    };
+  });
+}
+
+/**
  * Parse a .json file containing an array of category objects.
  * Each item must have name, type, and icon; id is optional (assigned by index).
  */
