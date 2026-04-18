@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { thresholdHaptic } from '@/app/lib/haptics';
 
 const DELETE_ZONE_PX = 88;
 const OPEN_THRESHOLD = DELETE_ZONE_PX * 0.35;
@@ -35,6 +36,7 @@ export function SwipeToDeleteRow({ onDeleteRequest, deleteDisabled = false, chil
   const suppressClickRef = useRef(false);
   const frontRef = useRef<HTMLDivElement>(null);
   const pointerActiveRef = useRef(false);
+  const hapticFiredRef = useRef(false);
 
   const clamp = useCallback((v: number) => Math.min(0, Math.max(-DELETE_ZONE_PX, v)), []);
 
@@ -63,6 +65,7 @@ export function SwipeToDeleteRow({ onDeleteRequest, deleteDisabled = false, chil
     axisRef.current = 'none';
     maxHorizRef.current = 0;
     suppressClickRef.current = false;
+    hapticFiredRef.current = false;
     startRef.current = { x: e.clientX, y: e.clientY, offset: offsetRef.current };
     el.setPointerCapture(e.pointerId);
   };
@@ -83,6 +86,10 @@ export function SwipeToDeleteRow({ onDeleteRequest, deleteDisabled = false, chil
 
     maxHorizRef.current = Math.max(maxHorizRef.current, Math.abs(dx));
     const next = clamp(startRef.current.offset + dx);
+    if (!hapticFiredRef.current && next <= -OPEN_THRESHOLD) {
+      hapticFiredRef.current = true;
+      thresholdHaptic();
+    }
     setOffset(next);
     offsetRef.current = next;
   };

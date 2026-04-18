@@ -29,6 +29,27 @@
   .animate-shine {
     animation: shine 2s ease-in-out infinite;
   }
+
+  /* Numpad: bounce on key press */
+  .animate-num-bounce {
+    animation: numBounce 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  /* Numpad: digit enters from below */
+  .animate-digit-enter {
+    animation: digitEnter 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  /* Numpad: whole modal slides up from bottom */
+  .animate-numpad-slide-up {
+    animation: numpadSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  /* Hide scrollbar for amount display */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @keyframes float {
@@ -70,6 +91,39 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes numBounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.88); }
+  70% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+@keyframes digitEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(100%) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-8%) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes numpadSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

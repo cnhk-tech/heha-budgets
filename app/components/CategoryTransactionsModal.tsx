@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getSpendingTransactions } from '@/app/db';
+import { getSpendingTransactions, removeSpendingTransaction } from '@/app/db';
 import type { SpendingTransaction } from '@/app/db/types';
 import { ModalPortal } from '@/app/components/ModalPortal';
+import { SwipeToDeleteRow } from '@/app/components/SwipeToDeleteRow';
 import { TransactionRowAmountStatus } from '@/app/components/TransactionRowAmountStatus';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useLockBodyScroll } from '@/app/hooks/useLockBodyScroll';
+import { tapHaptic, heavyHaptic, errorHaptic } from '@/app/lib/haptics';
 
-/** Time only — category & budget month are clear from modal context. */
 function formatTimeLine(iso: string): string {
   try {
     const d = new Date(iso);
@@ -45,6 +46,9 @@ export default function CategoryTransactionsModal({
   const [items, setItems] = useState<SpendingTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<SpendingTransaction | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useLockBodyScroll(isOpen);
 
@@ -57,7 +61,7 @@ export default function CategoryTransactionsModal({
       setItems(txs);
     } catch (e) {
       console.error(e);
-      setError('Could not load activity.');
+      setError('Could not load transactions.');
       setItems([]);
     } finally {
       setLoading(false);
@@ -67,6 +71,29 @@ export default function CategoryTransactionsModal({
   useEffect(() => {
     if (isOpen) load();
   }, [isOpen, load]);
+
+  const openDelete = (t: SpendingTransaction) => {
+    tapHaptic();
+    setDeleteError(null);
+    setConfirmDelete(t);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete?.id) return;
+    heavyHaptic();
+    setDeleteError(null);
+    setDeletingId(confirmDelete.id);
+    try {
+      await removeSpendingTransaction(userId, confirmDelete.id);
+      setConfirmDelete(null);
+      await load();
+    } catch (e) {
+      errorHaptic();
+      setDeleteError(e instanceof Error ? e.message : 'Could not delete transaction.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -79,7 +106,6 @@ export default function CategoryTransactionsModal({
 
   return (
     <ModalPortal role="dialog" aria-modal="true" aria-labelledby="category-tx-modal-title">
-      {/* Full-viewport backdrop — padding must NOT be on this ancestor or gaps appear above blur */}
       <button
         type="button"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -105,7 +131,7 @@ export default function CategoryTransactionsModal({
                 {categoryName}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {loading ? 'Loading…' : `${items.length} ${items.length === 1 ? 'entry' : 'entries'}`}
+                {loading ? 'Loading…' : `${items.length} ${items.length === 1 ? 'transaction' : 'transactions'}`}
               </p>
             </div>
           </div>
@@ -146,9 +172,9 @@ export default function CategoryTransactionsModal({
                   />
                 </svg>
               </div>
-              <p className="font-medium text-foreground">No pay activity yet</p>
+              <p className="font-medium text-foreground">No transactions yet</p>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                UPI pay attempts from the dashboard for this category will show here.
+                Expenses logged from the dashboard for this category will show here.
               </p>
             </div>
           )}
@@ -160,21 +186,15 @@ export default function CategoryTransactionsModal({
           )}
 
           {!loading && items.length > 0 && (
-            <ul className="divide-y divide-border" aria-label="Category pay activity">
-              {items.map((t) => (
-                <li key={t.id ?? `${t.createdAt}-${t.amount}`} className="py-4 first:pt-0 last:pb-0">
+            <ul className="divide-y divide-border [&>li:first-child_.tx-row-surface]:pt-0 [&>li:last-child_.tx-row-surface]:pb-0" aria-label="Category transactions">
+              {items.map((t) => {
+                const rowInner = (
                   <div className="flex items-start justify-between gap-4 sm:gap-5">
                     <div className="min-w-0 flex-1 space-y-1.5 pr-1">
                       <p className="text-sm text-foreground">{formatTimeLine(t.createdAt)}</p>
-                      {t.payeeName?.trim() ? (
-                        <p className="text-xs font-medium text-muted-foreground">{t.payeeName.trim()}</p>
+                      {t.reason?.trim() ? (
+                        <p className="text-xs font-medium text-foreground/80">{t.reason.trim()}</p>
                       ) : null}
-                      <p
-                        className="break-all font-mono text-xs leading-snug text-muted-foreground"
-                        title={t.upiId ?? undefined}
-                      >
-                        {t.upiId?.trim() ? t.upiId : '—'}
-                      </p>
                       <p className="text-xs text-muted-foreground">
                         <span className="text-muted-foreground/75">Budget</span>{' '}
                         <span className="text-foreground/85">{t.month}</span>
@@ -188,8 +208,26 @@ export default function CategoryTransactionsModal({
                       <TransactionRowAmountStatus amountLabel={formatCurrency(t.amount)} status={t.status} />
                     </div>
                   </div>
-                </li>
-              ))}
+                );
+
+                if (t.id != null) {
+                  return (
+                    <SwipeToDeleteRow
+                      key={t.id}
+                      onDeleteRequest={() => openDelete(t)}
+                      deleteDisabled={deletingId === t.id}
+                    >
+                      {rowInner}
+                    </SwipeToDeleteRow>
+                  );
+                }
+
+                return (
+                  <li key={`${t.createdAt}-${t.amount}`} className="py-4 first:pt-0 last:pb-0">
+                    {rowInner}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -203,11 +241,65 @@ export default function CategoryTransactionsModal({
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
             </svg>
-            Full transaction history
+            All transactions
           </Link>
         </div>
         </div>
       </div>
+
+      {/* Delete confirmation overlay */}
+      {confirmDelete && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Cancel delete"
+            onClick={() => { if (!deletingId) { setConfirmDelete(null); setDeleteError(null); } }}
+          />
+          <div className="relative z-30 w-full max-w-md space-y-4 rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-foreground">Delete this transaction?</h3>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                <span className="font-medium text-foreground">{formatCurrency(confirmDelete.amount)}</span>
+                {' · '}{categoryName}{' · '}{confirmDelete.month} {confirmDelete.year}
+              </p>
+              {confirmDelete.reason?.trim() && (
+                <p className="text-xs text-foreground/70">{confirmDelete.reason.trim()}</p>
+              )}
+              {confirmDelete.status === 'success' ? (
+                <p>
+                  This will remove the log and{' '}
+                  <strong className="text-foreground">add {formatCurrency(confirmDelete.amount)} back</strong> to
+                  this category&apos;s remaining budget for that month.
+                </p>
+              ) : (
+                <p>This only removes the failed log; your budget was not changed by this entry.</p>
+              )}
+            </div>
+            {deleteError && (
+              <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{deleteError}</p>
+            )}
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
+              <button
+                type="button"
+                onClick={() => { if (!deletingId) { setConfirmDelete(null); setDeleteError(null); } }}
+                disabled={!!deletingId}
+                className="min-h-[48px] w-full rounded-xl border border-border px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 disabled:opacity-50 sm:min-h-0 sm:w-auto sm:min-w-[6rem] sm:py-2.5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={!!deletingId}
+                className="min-h-[48px] w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 sm:min-h-0 sm:w-auto sm:min-w-[6rem] sm:py-2.5"
+              >
+                {deletingId ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ModalPortal>
   );
 }

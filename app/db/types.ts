@@ -8,7 +8,7 @@ export enum Stores {
 
 export type TransactionStatus = 'success' | 'failed';
 
-/** Logged when user completes or cancels a Pay flow (UPI), per category. */
+/** Logged when user records a spending entry per category. */
 export interface SpendingTransaction {
   id?: number;
   userId: number;
@@ -19,8 +19,11 @@ export interface SpendingTransaction {
   month: string;
   status: TransactionStatus;
   createdAt: string;
-  /** UPI VPA (e.g. name@upi) used for the pay intent. */
+  /** Short optional note describing what the expense was for. */
+  reason?: string;
+  /** @deprecated Legacy field from UPI flow. */
   upiId?: string;
+  /** @deprecated Legacy field from UPI flow. */
   payeeName?: string;
 }
 

@@ -9,6 +9,7 @@ import { SwipeToDeleteRow } from '@/app/components/SwipeToDeleteRow';
 import { TransactionRowAmountStatus } from '@/app/components/TransactionRowAmountStatus';
 import { useLockBodyScroll } from '@/app/hooks/useLockBodyScroll';
 import type { Category, SpendingTransaction } from '@/app/db/types';
+import { heavyHaptic, tapHaptic, errorHaptic } from '@/app/lib/haptics';
 
 /** Compact time — matches category activity modal. */
 function formatTimeLine(iso: string): string {
@@ -74,12 +75,14 @@ export default function TransactionsPage() {
   }, [categories]);
 
   const openDelete = (t: SpendingTransaction) => {
+    tapHaptic();
     setDeleteError(null);
     setConfirmDelete(t);
   };
 
   const handleConfirmDelete = async () => {
     if (!user || !confirmDelete?.id) return;
+    heavyHaptic();
     setDeleteError(null);
     setDeletingId(confirmDelete.id);
     try {
@@ -87,6 +90,7 @@ export default function TransactionsPage() {
       setConfirmDelete(null);
       await load();
     } catch (e) {
+      errorHaptic();
       setDeleteError(e instanceof Error ? e.message : 'Could not delete transaction.');
     } finally {
       setDeletingId(null);
@@ -119,7 +123,7 @@ export default function TransactionsPage() {
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   {loading ? 'Loading…' : `${transactions.length} ${transactions.length === 1 ? 'entry' : 'entries'}`}
                   {!loading && (
-                    <span className="hidden sm:inline"> · UPI pay flow from the dashboard</span>
+                    <span className="hidden sm:inline"> · Expenses logged from the dashboard</span>
                   )}
                 </p>
               </div>
@@ -282,7 +286,7 @@ export default function TransactionsPage() {
                 <p className="font-medium text-foreground">No transactions yet</p>
                 <p className="mt-1 max-w-xs px-2 text-sm text-muted-foreground">
                   {filterCategoryId === 'all'
-                    ? 'Pay from the dashboard (UPI) to see attempts here.'
+                    ? 'Log expenses from the dashboard to see entries here.'
                     : `No entries for ${filterSummary}. Try another category or all categories.`}
                 </p>
               </div>
@@ -303,16 +307,10 @@ export default function TransactionsPage() {
                           <span aria-hidden>{catIcon}</span>
                           <span className="min-w-0 break-words">{catName}</span>
                         </p>
-                        {t.payeeName?.trim() ? (
-                          <p className="text-xs font-medium text-muted-foreground">{t.payeeName.trim()}</p>
+                        {t.reason?.trim() ? (
+                          <p className="text-xs font-medium text-foreground/80">{t.reason.trim()}</p>
                         ) : null}
                         <p className="text-sm text-foreground">{formatTimeLine(t.createdAt)}</p>
-                        <p
-                          className="break-all font-mono text-xs leading-snug text-muted-foreground"
-                          title={t.upiId ?? undefined}
-                        >
-                          {t.upiId?.trim() ? t.upiId : '—'}
-                        </p>
                         <p className="text-xs text-muted-foreground">
                           <span className="text-muted-foreground/75">Budget</span>{' '}
                           <span className="text-foreground/85">{t.month}</span>

@@ -9,6 +9,7 @@ import { parseImportZip, importAll, type ImportPreview, type ImportSummary } fro
 import { deleteUser } from '@/app/db';
 import { ModalPortal } from '@/app/components/ModalPortal';
 import { useLockBodyScroll } from '@/app/hooks/useLockBodyScroll';
+import { tapHaptic, confirmHaptic, successHaptic, heavyHaptic, errorHaptic } from '@/app/lib/haptics';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function ProfilePage() {
   useLockBodyScroll(showDeleteConfirm || showImport);
 
   const openDeleteConfirm = () => {
+    tapHaptic();
     setShowDeleteConfirm(true);
     setDeleteConfirmName('');
     setDeleteError(null);
@@ -47,6 +49,7 @@ export default function ProfilePage() {
 
   const handleDeleteAccount = async () => {
     if (!user || !nameMatches) return;
+    heavyHaptic();
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -54,6 +57,7 @@ export default function ProfilePage() {
       await logout();
       router.push('/');
     } catch (e) {
+      errorHaptic();
       setDeleteError(e instanceof Error ? e.message : 'Could not delete account.');
     } finally {
       setDeleting(false);
@@ -62,11 +66,14 @@ export default function ProfilePage() {
 
   const handleExport = async () => {
     if (!user) return;
+    confirmHaptic();
     setExporting(true);
     try {
       const blob = await exportProfileData(user);
+      successHaptic();
       downloadBlob(blob, getExportFilename(user.name));
     } catch (e) {
+      errorHaptic();
       console.error(e);
     } finally {
       setExporting(false);
@@ -93,14 +100,17 @@ export default function ProfilePage() {
 
   const handleImportConfirm = async () => {
     if (!user || !importPreview) return;
+    confirmHaptic();
     setImporting(true);
     setImportError(null);
     try {
       const result = await importAll(user.id, importPreview, setImportProgress);
+      successHaptic();
       setImportResult(result);
       setImportPreview(null);
       setImportProgress(null);
     } catch (err) {
+      errorHaptic();
       setImportError(err instanceof Error ? err.message : 'Import failed.');
     } finally {
       setImporting(false);

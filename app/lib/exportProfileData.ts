@@ -43,6 +43,7 @@ export type ExportTransaction = {
   month: string;
   status: string;
   createdAt: string;
+  reason?: string;
   upiId?: string;
   payeeName?: string;
 };
@@ -86,6 +87,7 @@ export async function exportProfileData(user: User): Promise<Blob> {
     month: t.month,
     status: t.status,
     createdAt: t.createdAt,
+    ...(t.reason ? { reason: t.reason } : {}),
     ...(t.upiId ? { upiId: t.upiId } : {}),
     ...(t.payeeName ? { payeeName: t.payeeName } : {}),
   }));
@@ -212,6 +214,7 @@ export async function parseTransactionsJson(file: File): Promise<ExportTransacti
       month,
       status,
       createdAt,
+      ...(typeof o.reason === 'string' && o.reason.trim() ? { reason: o.reason.trim() } : {}),
       ...(typeof o.upiId === 'string' && o.upiId.trim() ? { upiId: o.upiId.trim() } : {}),
       ...(typeof o.payeeName === 'string' && o.payeeName.trim() ? { payeeName: o.payeeName.trim() } : {}),
     };

@@ -4,6 +4,7 @@ import { useState, FormEvent, useEffect } from "react";
 import EmojiPicker, { EmojiClickData, EmojiStyle, Theme } from 'emoji-picker-react';
 import { Category, Categorytype } from "@/app/db/types";
 import { addCategory as addCategoryInDB, updateCategory } from "@/app/db/categories";
+import { tapHaptic, confirmHaptic, errorHaptic } from '@/app/lib/haptics';
 
 const Add = ({
   requestCategoryType,
@@ -72,8 +73,12 @@ const Add = ({
       setNameError("");
     }
 
-    if (hasError) return;
+    if (hasError) {
+      errorHaptic();
+      return;
+    }
 
+    confirmHaptic();
     const category: Category = {
       id: editingCategory?.id ?? 0,
       userId,
@@ -90,6 +95,7 @@ const Add = ({
   };
 
   const handleEmojiSelect = ({ emoji }: EmojiClickData) => {
+    tapHaptic();
     setIcon(emoji);
     setShowEmojiPicker(false);
   };

@@ -5,6 +5,7 @@ import { getCategories } from '@/app/db';
 import { addBudgetForMonth, updateBudget } from '@/app/db';
 import { Budget, BudgetHistory, Category } from '@/app/db/types';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
+import { tapHaptic, confirmHaptic, errorHaptic } from '@/app/lib/haptics';
 
 type Mode = 'add' | 'edit';
 
@@ -73,10 +74,12 @@ export default function BudgetFormModal({
 
   const addCategoryLine = (categoryId: number) => {
     if (lines.some((l) => l.categoryId === categoryId)) return;
+    tapHaptic();
     setLines((prev) => [...prev, { categoryId, budget: 0, spent: 0 }]);
   };
 
   const removeLine = (categoryId: number) => {
+    tapHaptic();
     setLines((prev) => prev.filter((l) => l.categoryId !== categoryId));
   };
 
@@ -92,9 +95,11 @@ export default function BudgetFormModal({
         left: l.budget - l.spent,
       }));
     if (budgets.length === 0) {
+      errorHaptic();
       setError('Add at least one category with a budget amount.');
       return;
     }
+    confirmHaptic();
     setIsSubmitting(true);
     try {
       if (mode === 'add') {
@@ -105,6 +110,7 @@ export default function BudgetFormModal({
       onSuccess();
       onClose();
     } catch (err) {
+      errorHaptic();
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setIsSubmitting(false);

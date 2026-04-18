@@ -136,7 +136,6 @@ export async function deleteSpendingTransactionsByUserId(userId: number): Promis
   });
 }
 
-/** Convenience for Pay modal. */
 export function buildTransactionPayload(
   userId: number,
   categoryId: number,
@@ -145,8 +144,7 @@ export function buildTransactionPayload(
   year: number,
   month: string,
   status: TransactionStatus,
-  payeeName?: string,
-  upiId?: string
+  reason?: string,
 ): Omit<SpendingTransaction, 'id'> {
   return {
     userId,
@@ -157,7 +155,6 @@ export function buildTransactionPayload(
     month,
     status,
     createdAt: new Date().toISOString(),
-    ...(payeeName?.trim() ? { payeeName: payeeName.trim() } : {}),
-    ...(upiId?.trim() ? { upiId: upiId.trim() } : {}),
+    ...(reason?.trim() ? { reason: reason.trim() } : {}),
   };
 }

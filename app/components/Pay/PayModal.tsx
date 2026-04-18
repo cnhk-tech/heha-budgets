@@ -1,62 +1,61 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ModalPortal } from '@/app/components/ModalPortal';
 import { useLockBodyScroll } from '@/app/hooks/useLockBodyScroll';
 import { addExpense } from '@/app/db/budgets';
 import { addSpendingTransaction, buildTransactionPayload } from '@/app/db/transactions';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
-import {
-  parseUPIString,
-  buildUpiPayUrl,
-  openUpiDeepLink,
-  patchAmountOnCleanUrl,
-} from '@/app/lib/upi';
+import { keypressHaptic, confirmHaptic, successHaptic, errorHaptic } from '@/app/lib/haptics';
 
-type PayMode = 'scan' | 'upi';
-type PayStep = 'form' | 'awaiting' | 'recording' | 'done';
+type PayStep = 'input' | 'recording' | 'done';
 
-const QR_READER_ID = 'pay-modal-qr-reader';
+const MAX_DIGITS = 10;
+const MAX_DECIMALS = 2;
 
-/** Prefer rear/environment camera; deprioritize front/selfie by device label (browser-dependent). */
-function sortCamerasBackFirst(cameras: Array<{ id: string; label: string }>) {
-  const score = (label: string) => {
-    const l = label.toLowerCase();
-    if (
-      /back|rear|environment|world|wide|tele|ultra|primary|camera\s*2|camera\s*3|0\s*\)|\boutward/i.test(l) &&
-      !/front|user|face|selfie|facetime|inward/i.test(l)
-    ) {
-      return 3;
-    }
-    if (/front|user|face|selfie|facetime|inward|1\s*\)/i.test(l)) return 0;
-    return 1;
-  };
-  return [...cameras].sort((a, b) => score(b.label) - score(a.label));
+const NUMPAD_KEYS = [
+  '1', '2', '3',
+  '4', '5', '6',
+  '7', '8', '9',
+  '.', '0', 'backspace',
+] as const;
+
+type AmountTheme = 'idle' | 'safe' | 'warn' | 'over';
+
+function getAmountTheme(amount: number, budgetLeft: number | undefined): AmountTheme {
+  if (amount <= 0) return 'idle';
+  if (budgetLeft === undefined) return 'safe';
+  if (amount > budgetLeft) return 'over';
+  if (amount > budgetLeft * 0.75) return 'warn';
+  return 'safe';
 }
 
-/** Human-readable camera errors (mobile often returns generic DOMException messages). */
-function mapCameraError(err: unknown): string {
-  if (err && typeof err === 'object' && 'name' in err) {
-    const name = String((err as DOMException).name);
-    if (name === 'NotAllowedError') {
-      return 'Camera permission denied. Allow camera access in your browser or site settings, then try again.';
-    }
-    if (name === 'NotFoundError') {
-      return 'No usable camera was found.';
-    }
-    if (name === 'NotReadableError' || name === 'AbortError' || name === 'OverconstrainedError') {
-      return 'Camera is in use or not available. Close other apps using the camera, then try again.';
-    }
-  }
-  const msg = err instanceof Error ? err.message : String(err);
-  if (/insecure|https|SSL|secure context/i.test(msg)) {
-    return 'Camera needs a secure page (HTTPS). Open this app over HTTPS or use localhost for testing.';
-  }
-  if (/Permission|denied|blocked/i.test(msg)) {
-    return 'Camera permission denied. Allow camera access in your browser settings, then try again.';
-  }
-  return msg || 'Could not start camera';
-}
+const THEME_STYLES: Record<AmountTheme, { display: string; border: string; glow: string; text: string }> = {
+  idle: {
+    display: 'bg-background border-border',
+    border: 'border-border',
+    glow: '',
+    text: 'text-muted-foreground',
+  },
+  safe: {
+    display: 'bg-emerald-500/[0.06] border-emerald-500/30 dark:bg-emerald-500/[0.08]',
+    border: 'border-emerald-500/30',
+    glow: 'shadow-[0_0_30px_-5px] shadow-emerald-500/20',
+    text: 'text-emerald-600 dark:text-emerald-400',
+  },
+  warn: {
+    display: 'bg-amber-500/[0.06] border-amber-500/30 dark:bg-amber-500/[0.08]',
+    border: 'border-amber-500/30',
+    glow: 'shadow-[0_0_30px_-5px] shadow-amber-500/20',
+    text: 'text-amber-600 dark:text-amber-400',
+  },
+  over: {
+    display: 'bg-rose-500/[0.06] border-rose-500/30 dark:bg-rose-500/[0.08]',
+    border: 'border-rose-500/30',
+    glow: 'shadow-[0_0_30px_-5px] shadow-rose-500/25',
+    text: 'text-rose-600 dark:text-rose-400',
+  },
+};
 
 type Props = {
   onClose: () => void;
@@ -71,266 +70,100 @@ type Props = {
 export default function PayModal({ onClose, categoryName, budgetLeft, categoryId, year, month, userId }: Props) {
   const { formatCurrency, currencySymbol } = useCurrency();
   useLockBodyScroll(true);
-  const [mode, setMode] = useState<PayMode>('scan');
-  const [step, setStep] = useState<PayStep>('form');
+
+  const [step, setStep] = useState<PayStep>('input');
+  const [raw, setRaw] = useState('');
+  const [reason, setReason] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState(false);
-  const [securePayContext, setSecurePayContext] = useState(true);
-  const [scanResult, setScanResult] = useState<{
-    upiId: string;
-    payeeName: string;
-    amount: string;
-    cleanUrl: string;
-  } | null>(null);
-  const [amount, setAmount] = useState('');
-  const [upiId, setUpiId] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [cameraDevices, setCameraDevices] = useState<Array<{ id: string; label: string }>>([]);
-  const [cameraIndex, setCameraIndex] = useState(0);
-  const html5QrRef = useRef<InstanceType<typeof import('html5-qrcode').Html5Qrcode> | null>(null);
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
+  const [digitAnimKey, setDigitAnimKey] = useState(0);
+  const pressTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    setSecurePayContext(typeof window !== 'undefined' && window.isSecureContext);
+  const parsedAmount = parseFloat(raw) || 0;
+  const theme = getAmountTheme(parsedAmount, budgetLeft);
+  const ts = THEME_STYLES[theme];
+  const isOverBudget = theme === 'over';
+  const overBy = isOverBudget && budgetLeft !== undefined ? parsedAmount - budgetLeft : 0;
+  const canConfirm = parsedAmount > 0;
+
+  const budgetPercent =
+    budgetLeft !== undefined && budgetLeft > 0 && parsedAmount > 0
+      ? Math.min((parsedAmount / budgetLeft) * 100, 100)
+      : 0;
+
+  useEffect(() => () => clearTimeout(pressTimer.current), []);
+
+  const handleKey = useCallback((key: string) => {
+    keypressHaptic();
+    setPressedKey(key);
+    clearTimeout(pressTimer.current);
+    pressTimer.current = setTimeout(() => setPressedKey(null), 180);
+
+    setRaw((prev) => {
+      if (key === 'backspace') return prev.slice(0, -1);
+
+      if (key === '.') {
+        if (prev.includes('.')) return prev;
+        return prev === '' ? '0.' : prev + '.';
+      }
+
+      const dotIdx = prev.indexOf('.');
+      if (dotIdx !== -1 && prev.length - dotIdx > MAX_DECIMALS) return prev;
+      if (prev.replace('.', '').length >= MAX_DIGITS) return prev;
+      if (prev === '0' && key !== '.') return key;
+
+      setDigitAnimKey((k) => k + 1);
+      return prev + key;
+    });
   }, []);
 
-  const stopScanner = useCallback(() => {
-    const qr = html5QrRef.current;
-    html5QrRef.current = null;
-    if (qr) {
-      try {
-        void qr.stop().catch(() => {});
-      } catch {
-        try {
-          qr.clear();
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    setIsScanning(false);
-  }, []);
-
-  useEffect(() => {
-    if (mode !== 'scan') {
-      setCameraIndex(0);
-    }
-  }, [mode]);
-
-  useEffect(() => {
-    if (mode !== 'scan' || scanResult !== null) {
-      stopScanner();
-      return;
-    }
-    setScanError(null);
-    let mounted = true;
-
-    const startScan = async () => {
-      try {
-        const { Html5Qrcode } = await import('html5-qrcode');
-        const raw = await Html5Qrcode.getCameras();
-        const cameras = sortCamerasBackFirst(raw);
-        if (!cameras?.length) {
-          if (mounted) setScanError('No camera found');
-          return;
-        }
-        if (!mounted || !document.getElementById(QR_READER_ID)) return;
-
-        if (mounted) setCameraDevices(cameras);
-
-        const idx = Math.min(cameraIndex, cameras.length - 1);
-        // Try selected camera first, then others (handles Overconstrained / busy camera on some phones).
-        const tryOrder = [cameras[idx], ...cameras.filter((_, i) => i !== idx)];
-
-        // Let the modal finish layout so the scanner box has non-zero size (fixes some mobile failures).
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-        });
-        await new Promise((r) => setTimeout(r, 120));
-        if (!mounted || !document.getElementById(QR_READER_ID)) return;
-
-        const scanConfig = {
-          fps: 10,
-          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            const size = Math.max(160, Math.min(280, Math.floor(minEdge * 0.72)));
-            return { width: size, height: size };
-          },
-        };
-
-        const onDecoded = (decodedText: string) => {
-          const parsed = parseUPIString(decodedText);
-          if (parsed.upiId) {
-            setScanResult(parsed);
-            const qr = html5QrRef.current;
-            qr?.stop().catch(() => {});
-            html5QrRef.current = null;
-            setIsScanning(false);
-          }
-        };
-
-        let lastError: unknown;
-        for (const cam of tryOrder) {
-          if (!mounted) return;
-          const html5Qr = new Html5Qrcode(QR_READER_ID);
-          html5QrRef.current = html5Qr;
-          try {
-            // Device id only — facingMode + retry on same instance fails on many mobile WebViews.
-            await html5Qr.start(cam.id, scanConfig, onDecoded, () => {});
-            if (mounted) setIsScanning(true);
-            return;
-          } catch (e) {
-            lastError = e;
-            html5QrRef.current = null;
-            try {
-              html5Qr.clear();
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-        if (mounted) setScanError(mapCameraError(lastError));
-      } catch (e) {
-        if (mounted) setScanError(mapCameraError(e));
-      }
-    };
-
-    startScan();
-    return () => {
-      mounted = false;
-      stopScanner();
-    };
-  }, [mode, scanResult, stopScanner, cameraIndex]);
-
-  const handleResetScan = () => {
-    setScanResult(null);
-    setScanError(null);
-    setAmount('');
-  };
-
-  /** QR may omit `am`, or include `am=0` / empty — treat as “no fixed amount” so user can type it. */
-  const scannedAmountParsed =
-    scanResult?.amount != null && String(scanResult.amount).trim() !== ''
-      ? parseFloat(String(scanResult.amount).replace(/,/g, ''))
-      : NaN;
-  const hasValidScannedAmount =
-    scanResult !== null &&
-    !Number.isNaN(scannedAmountParsed) &&
-    scannedAmountParsed > 0;
-
-  const currentAmount =
-    mode === 'scan'
-      ? hasValidScannedAmount
-        ? scannedAmountParsed
-        : parseFloat(amount) || 0
-      : parseFloat(amount) || 0;
-  const effectiveUpiId = mode === 'scan' ? (scanResult?.upiId ?? '') : upiId.trim();
-  const effectivePayeeName = mode === 'scan' ? (scanResult?.payeeName ?? '') : '';
-  const amountStr =
-    mode === 'scan'
-      ? hasValidScannedAmount
-        ? String(scanResult!.amount).trim()
-        : amount
-      : amount;
-  const isOverBudget =
-    budgetLeft !== undefined && currentAmount > 0 && currentAmount > budgetLeft;
-  const overBy = isOverBudget && budgetLeft !== undefined ? currentAmount - budgetLeft : 0;
-
-  const canOpenUpi = currentAmount > 0 && effectiveUpiId.length > 0;
-
-  const upiIntentUrl = useMemo(() => {
-    if (!canOpenUpi) return '';
-    if (mode === 'scan' && scanResult?.cleanUrl) {
-      return patchAmountOnCleanUrl(scanResult.cleanUrl, amountStr);
-    }
-    return buildUpiPayUrl(effectiveUpiId, effectivePayeeName, amountStr);
-  }, [canOpenUpi, mode, scanResult, effectiveUpiId, effectivePayeeName, amountStr]);
-
-  const handleOpenInPaymentApp = () => {
-    if (!upiIntentUrl) return;
-    setSubmitError(null);
-    openUpiDeepLink(upiIntentUrl);
-    setStep('awaiting');
-  };
-
-  const handleCopyUpiId = async () => {
-    if (!effectiveUpiId) return;
-    try {
-      await navigator.clipboard.writeText(effectiveUpiId);
-      setCopiedId(true);
-      setTimeout(() => setCopiedId(false), 2000);
-    } catch {
-      // clipboard not available
-    }
-  };
-
-  const logTransaction = async (status: 'success' | 'failed') => {
-    if (
-      userId == null ||
-      categoryId == null ||
-      year == null ||
-      month == null ||
-      currentAmount <= 0
-    ) {
-      return;
-    }
-    try {
-      await addSpendingTransaction(
-        buildTransactionPayload(
-          userId,
-          categoryId,
-          categoryName ?? 'Category',
-          currentAmount,
-          year,
-          month,
-          status,
-          effectivePayeeName,
-          effectiveUpiId
-        )
-      );
-    } catch (err) {
-      console.error('Failed to log transaction', err);
-    }
-  };
-
-  const handlePaymentSuccess = async () => {
-    if (currentAmount <= 0) return;
+  const handleConfirm = async () => {
+    if (!canConfirm) return;
+    confirmHaptic();
     setSubmitError(null);
     setStep('recording');
     try {
       if (userId != null && categoryId != null && year != null && month != null) {
-        await addExpense(userId, year, month, categoryId, currentAmount);
-        await logTransaction('success');
+        await addExpense(userId, year, month, categoryId, parsedAmount);
+        await addSpendingTransaction(
+          buildTransactionPayload(userId, categoryId, categoryName ?? 'Category', parsedAmount, year, month, 'success', reason)
+        );
       }
+      successHaptic();
       setStep('done');
-      setTimeout(() => onClose(), 1500);
+      setTimeout(() => onClose(), 1400);
     } catch (e) {
-      await logTransaction('failed');
-      setSubmitError(e instanceof Error ? e.message : 'Failed to record payment');
-      setStep('awaiting');
+      if (userId != null && categoryId != null && year != null && month != null) {
+        try {
+          await addSpendingTransaction(
+            buildTransactionPayload(userId, categoryId, categoryName ?? 'Category', parsedAmount, year, month, 'failed', reason)
+          );
+        } catch { /* ignore */ }
+      }
+      errorHaptic();
+      setSubmitError(e instanceof Error ? e.message : 'Failed to record expense');
+      setStep('input');
     }
   };
 
-  const handlePaymentFailed = async () => {
-    await logTransaction('failed');
-    stopScanner();
-    onClose();
-  };
+  const displayDigits = raw || '0';
 
   return (
-    <ModalPortal className="flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Pay</h2>
-            <p className="text-sm text-muted-foreground">
-              {categoryName ? `Pay for ${categoryName}` : 'Scan UPI QR or enter details'}
-            </p>
+    <ModalPortal className="flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-numpad-slide-up safe-bottom">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-2">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-foreground truncate">Log expense</h2>
+            {categoryName && (
+              <p className="text-sm text-muted-foreground truncate">{categoryName}</p>
+            )}
           </div>
           <button
             type="button"
-            onClick={() => { stopScanner(); onClose(); }}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-border/50"
+            onClick={onClose}
+            className="p-2 -mr-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-border/50 transition-colors"
             aria-label="Close"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -339,276 +172,157 @@ export default function PayModal({ onClose, categoryName, budgetLeft, categoryId
           </button>
         </div>
 
-        <div className="p-4 overflow-y-auto flex-1 space-y-4">
-          {step === 'awaiting' || step === 'recording' ? (
-            <div className="space-y-6 py-4">
-              {step === 'recording' ? (
-                <div className="rounded-xl bg-muted/50 border border-border p-8 flex flex-col items-center justify-center gap-4">
-                  <span className="animate-spin rounded-full h-10 w-10 border-2 border-accent border-t-transparent" />
-                  <p className="text-foreground font-medium">Recording payment…</p>
-                  <p className="text-sm text-muted-foreground">Updating your budget</p>
-                </div>
-              ) : (
-                <>
-                  <div className="rounded-xl bg-muted/50 border border-border p-5 text-center space-y-2">
-                    <p className="text-foreground font-medium">Payment app opened</p>
-                    <p className="text-sm text-muted-foreground">
-                      Complete the payment there, then return here and tell us what happened.
-                    </p>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      type="button"
-                      onClick={handlePaymentSuccess}
-                      className="flex-1 py-3.5 text-sm font-medium rounded-xl bg-accent text-accent-foreground hover:opacity-90 flex items-center justify-center gap-2"
-                    >
-                      Payment successful
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handlePaymentFailed}
-                      className="flex-1 py-3.5 text-sm font-medium rounded-xl border border-border text-foreground hover:bg-muted/50"
-                    >
-                      Failed
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubmitError(null);
-                      if (upiIntentUrl) openUpiDeepLink(upiIntentUrl);
-                    }}
-                    disabled={!upiIntentUrl}
-                    className="w-full py-2.5 text-sm font-medium rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Pay again
-                  </button>
-                  <p className="text-center text-xs text-muted-foreground">
-                    Use this if the app closed when you tapped outside it, or you need another try.
-                  </p>
-                  {submitError && (
-                    <p className="text-sm text-rose-600 dark:text-rose-400 text-center">{submitError}</p>
-                  )}
-                </>
-              )}
-            </div>
-          ) : step === 'done' ? (
-            <div className="py-8 flex flex-col items-center justify-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-accent/20 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-accent" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <p className="text-foreground font-semibold">Payment recorded</p>
-              <p className="text-sm text-muted-foreground">Updating your budget…</p>
-            </div>
-          ) : (
-            <>
-          {!securePayContext && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-950 dark:text-amber-100">
-              <p className="font-medium">Connection not secure (not HTTPS)</p>
-              <p className="mt-1 text-amber-900/90 dark:text-amber-100/90">
-                Payment apps and the camera often block this. Use HTTPS in production, or localhost for testing. If
-                nothing opens, use &quot;Copy payment link&quot; below or paste the UPI ID in your app.
-              </p>
-            </div>
-          )}
-          <p className="text-sm font-medium text-muted-foreground">Choose an option</p>
-          <div className="flex rounded-xl bg-background border border-border p-1">
-            <button
-              type="button"
-              onClick={() => setMode('scan')}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                mode === 'scan' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Scan QR
-            </button>
-            <button
-              type="button"
-              onClick={() => { stopScanner(); setMode('upi'); setScanResult(null); }}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                mode === 'upi' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Use UPI ID
-            </button>
+        {step === 'recording' ? (
+          <div className="px-5 py-16 flex flex-col items-center justify-center gap-4">
+            <span className="animate-spin rounded-full h-10 w-10 border-2 border-accent border-t-transparent" />
+            <p className="text-foreground font-medium">Recording expense…</p>
+            <p className="text-sm text-muted-foreground">Updating your budget</p>
           </div>
-
-          {categoryName != null && budgetLeft !== undefined && (
-            <div className="rounded-xl bg-muted/50 border border-border px-4 py-2.5">
-              <p className="text-sm text-muted-foreground">
-                Budget left for <span className="font-medium text-foreground">{categoryName}</span>:{' '}
-                <span className="font-semibold text-foreground">{formatCurrency(budgetLeft)}</span>
-              </p>
+        ) : step === 'done' ? (
+          <div className="px-5 py-16 flex flex-col items-center justify-center gap-4 animate-fade-in">
+            <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center animate-scale-in">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-accent" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
             </div>
-          )}
-
-          {mode === 'scan' && (
-            <div className="space-y-3">
-              {!scanResult ? (
-                <>
-                  <div
-                    id={QR_READER_ID}
-                    className="min-h-[220px] overflow-hidden rounded-xl border border-border bg-background"
-                  />
-                  {cameraDevices.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setCameraIndex((i) => (i + 1) % cameraDevices.length)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/70"
-                      aria-label="Switch camera"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 shrink-0"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        aria-hidden
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                        />
-                      </svg>
-                      Switch camera
-                      <span className="text-muted-foreground">
-                        ({cameraIndex + 1}/{cameraDevices.length})
-                      </span>
-                    </button>
-                  )}
-                  {scanError && <p className="text-sm text-rose-600 dark:text-rose-400">{scanError}</p>}
-                  {!scanError && !isScanning && (
-                    <p className="text-sm text-muted-foreground">Point camera at UPI QR code</p>
-                  )}
-                </>
-              ) : (
-                <div className="bg-background border border-border rounded-2xl p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Payee</p>
-                      <p className="text-sm text-foreground break-all leading-snug">{scanResult.upiId}</p>
-                      {scanResult.payeeName && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{scanResult.payeeName}</p>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleResetScan}
-                      className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
-                    >
-                      Scan again
-                    </button>
+            <p className="text-foreground font-semibold text-lg">Expense recorded!</p>
+            <p className="text-sm text-muted-foreground text-center">
+              {formatCurrency(parsedAmount)} added to {categoryName ?? 'your budget'}
+              {reason.trim() ? ` — ${reason.trim()}` : ''}
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Amount display — centered, big, with dynamic color theme */}
+            <div className={[
+              'mx-5 mt-2 mb-1 rounded-2xl border px-5 py-8 flex flex-col items-center justify-center min-h-[120px]',
+              'transition-all duration-500 ease-out',
+              ts.display,
+              ts.glow,
+            ].join(' ')}>
+              {/* Budget usage bar */}
+              {budgetLeft !== undefined && budgetLeft > 0 && (
+                <div className="w-full max-w-[200px] mb-4">
+                  <div className="h-1 rounded-full bg-border/60 overflow-hidden">
+                    <div
+                      className={[
+                        'h-full rounded-full transition-all duration-500 ease-out',
+                        theme === 'over' ? 'bg-rose-500' : theme === 'warn' ? 'bg-amber-500' : 'bg-emerald-500',
+                      ].join(' ')}
+                      style={{ width: `${budgetPercent}%` }}
+                    />
                   </div>
-
-                  {!hasValidScannedAmount ? (
-                    <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Amount ({currencySymbol})</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputMode="decimal"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground text-lg font-semibold focus:ring-2 focus:ring-ring"
-                        autoFocus
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-center py-1">
-                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Amount</p>
-                      <p className="text-2xl font-bold text-foreground">{formatCurrency(scannedAmountParsed)}</p>
-                    </div>
-                  )}
-
-                  {isOverBudget && (
-                    <div className="rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 py-3">
-                      <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
-                        Exceeds budget by {formatCurrency(overBy)}
-                      </p>
-                    </div>
-                  )}
-                  {submitError && (
-                    <p className="text-sm text-rose-600 dark:text-rose-400">{submitError}</p>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleOpenInPaymentApp}
-                    className="w-full py-3.5 text-sm font-semibold rounded-xl bg-accent text-accent-foreground shadow-lg shadow-accent/20 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
-                    disabled={!upiIntentUrl}
-                  >
-                    Pay now{currentAmount > 0 ? ` — ${formatCurrency(currentAmount)}` : ''}
-                  </button>
-
-                  {effectiveUpiId && (
-                    <button
-                      type="button"
-                      onClick={handleCopyUpiId}
-                      className="w-full py-2.5 text-sm font-medium rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                    >
-                      {copiedId ? 'Copied!' : `Copy UPI ID — ${effectiveUpiId}`}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {mode === 'upi' && (
-            <div className="bg-background border border-border rounded-2xl p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">UPI ID</label>
-                <input
-                  type="text"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="name@upi"
-                  autoFocus
-                  className="w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Amount ({currencySymbol})</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-4 py-3 rounded-xl bg-card border border-border text-foreground text-lg font-semibold focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              {isOverBudget && (
-                <div className="rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 py-3">
-                  <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
-                    Exceeds budget by {formatCurrency(overBy)}
+                  <p className="text-[10px] text-muted-foreground text-center mt-1.5 tabular-nums">
+                    {formatCurrency(budgetLeft)} left
                   </p>
                 </div>
               )}
-              {submitError && (
-                <p className="text-sm text-rose-600 dark:text-rose-400">{submitError}</p>
+
+              {/* Amount digits */}
+              <div className="flex items-baseline justify-center gap-1 overflow-hidden">
+                <span className={`text-2xl font-semibold mr-0.5 transition-colors duration-500 ${parsedAmount > 0 ? ts.text : 'text-muted-foreground/50'}`}>
+                  {currencySymbol}
+                </span>
+                <div className="flex items-baseline">
+                  {displayDigits.split('').map((char, i) => (
+                    <span
+                      key={`${i}-${char}-${i === displayDigits.length - 1 ? digitAnimKey : 'static'}`}
+                      className={[
+                        'text-5xl sm:text-6xl font-bold tabular-nums inline-block transition-colors duration-500',
+                        parsedAmount > 0 ? ts.text : 'text-muted-foreground/40',
+                        i === displayDigits.length - 1 && raw.length > 0 ? 'animate-digit-enter' : '',
+                      ].join(' ')}
+                    >
+                      {char}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Over budget label */}
+              {isOverBudget && (
+                <p className="mt-3 text-xs font-medium text-rose-600 dark:text-rose-400 animate-fade-in">
+                  Over by {formatCurrency(overBy)}
+                </p>
               )}
+            </div>
+
+            {/* Reason input — minimal */}
+            <div className="mx-5 mb-2 mt-1">
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="What for? (optional)"
+                maxLength={60}
+                className="w-full text-center text-sm bg-transparent border-0 border-b border-border/50 focus:border-accent/50 text-foreground placeholder:text-muted-foreground/40 py-2 outline-none transition-colors"
+              />
+            </div>
+
+            {submitError && (
+              <p className="mx-5 mb-2 text-sm text-rose-600 dark:text-rose-400 text-center">{submitError}</p>
+            )}
+
+            {/* Number pad */}
+            <div className="px-4 pb-2 pt-1">
+              <div className="grid grid-cols-3 gap-2">
+                {NUMPAD_KEYS.map((key) => {
+                  const isBackspace = key === 'backspace';
+                  const isDot = key === '.';
+                  const isActive = pressedKey === key;
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleKey(key)}
+                      className={[
+                        'relative h-[52px] sm:h-14 rounded-2xl text-xl font-semibold transition-colors select-none',
+                        'active:scale-95',
+                        isBackspace
+                          ? 'bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                          : 'bg-background border border-border text-foreground hover:bg-muted/30',
+                        isActive ? 'animate-num-bounce' : '',
+                      ].join(' ')}
+                      aria-label={isBackspace ? 'Delete' : isDot ? 'Decimal point' : key}
+                    >
+                      {isBackspace ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l7-7h11a1 1 0 011 1v12a1 1 0 01-1 1H10l-7-7z" />
+                        </svg>
+                      ) : (
+                        key
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Confirm button */}
+            <div className="px-4 pb-5 pt-1">
               <button
                 type="button"
-                onClick={handleOpenInPaymentApp}
-                disabled={!upiIntentUrl}
-                className="w-full py-3.5 text-sm font-semibold rounded-xl bg-accent text-accent-foreground shadow-lg shadow-accent/20 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+                onClick={handleConfirm}
+                disabled={!canConfirm}
+                className={[
+                  'w-full py-4 text-base font-semibold rounded-2xl transition-all duration-300',
+                  canConfirm
+                    ? isOverBudget
+                      ? 'bg-rose-600 text-white shadow-lg shadow-rose-500/20 hover:bg-rose-700 active:scale-[0.98]'
+                      : 'bg-accent text-accent-foreground shadow-lg shadow-accent/20 hover:opacity-90 active:scale-[0.98]'
+                    : 'bg-muted/40 text-muted-foreground cursor-not-allowed shadow-none',
+                ].join(' ')}
               >
-                Pay now{currentAmount > 0 ? ` — ${formatCurrency(currentAmount)}` : ''}
+                {canConfirm
+                  ? isOverBudget
+                    ? `Log ${formatCurrency(parsedAmount)} anyway`
+                    : `Log ${formatCurrency(parsedAmount)}`
+                  : 'Enter an amount'}
               </button>
             </div>
-          )}
-            </>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </ModalPortal>
   );

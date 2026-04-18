@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useUser } from '@/app/contexts/UserContext';
 import { AppLogo } from '@/app/components/AppLogo';
+import { tapHaptic } from '@/app/lib/haptics';
 
 const Header = () => {
   const router = useRouter();
@@ -19,6 +20,7 @@ const Header = () => {
   }, []);
 
   const handleLogout = async () => {
+    tapHaptic();
     await logout();
     router.push('/');
   };

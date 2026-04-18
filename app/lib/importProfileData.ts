@@ -130,6 +130,7 @@ export async function importAll(
       month: tx.month,
       status: tx.status as TransactionStatus,
       createdAt: tx.createdAt,
+      ...(tx.reason ? { reason: tx.reason } : {}),
       ...(tx.upiId ? { upiId: tx.upiId } : {}),
       ...(tx.payeeName ? { payeeName: tx.payeeName } : {}),
     });

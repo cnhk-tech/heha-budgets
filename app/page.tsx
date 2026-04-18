@@ -96,7 +96,7 @@ const features = [
   {
     title: 'Categories you actually use',
     description:
-      'Organize spending with icons and types. Filter activity by category so you always know where money went.',
+      'Organize spending with icons and types. Filter transactions by category so you always know where money went.',
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -104,9 +104,9 @@ const features = [
     ),
   },
   {
-    title: 'Pay with UPI from the dashboard',
+    title: 'Log expenses from the dashboard',
     description:
-      'Scan merchant QR codes or enter a UPI ID, then jump straight to your payment app. H² tracks the attempt and updates your budget when you confirm success.',
+      'Tap a category, punch in the amount on the number pad, and you\'re done. H² updates your budget instantly.',
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0l.001 0M18 9h2M2 2h2v2h2v18H2V2z" />

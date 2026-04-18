@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { UserProvider, useUser } from '@/app/contexts/UserContext';
 import { CURRENCIES, type CurrencyCode } from '@/app/contexts/CurrencyContext';
 import { findUserByName } from '@/app/db';
+import { confirmHaptic, successHaptic } from '@/app/lib/haptics';
 
 function LoginFormInner() {
   const [name, setName] = useState('');
@@ -31,9 +32,11 @@ function LoginFormInner() {
   const handleLogin = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    confirmHaptic();
     setIsSubmitting(true);
     try {
       await login(trimmed, isNewUser === true ? currency : undefined);
+      successHaptic();
       router.replace('/dashboard');
     } catch (e) {
       console.error(e);

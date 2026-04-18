@@ -5,6 +5,7 @@ import { Category, Categorytype } from "@/app/db/types";
 import { deleteCategory } from "@/app/db/categories";
 import { ModalPortal } from "@/app/components/ModalPortal";
 import { useLockBodyScroll } from "@/app/hooks/useLockBodyScroll";
+import { tapHaptic, heavyHaptic } from '@/app/lib/haptics';
 
 const CategoryList = ({
   categories,
@@ -24,16 +25,19 @@ const CategoryList = ({
   useLockBodyScroll(showDeleteDialog);
 
   const handleDelete = (category: Category) => {
+    tapHaptic();
     setCategoryToDelete(category);
     setShowDeleteDialog(true);
   };
 
   const handleEdit = (category: Category) => {
+    tapHaptic();
     onAddCategoryClick(category.type, category);
   };
 
   const handleConfirmDelete = async () => {
     if (!categoryToDelete) return;
+    heavyHaptic();
     setIsDeleting(true);
     const success = await deleteCategory(categoryToDelete.id);
     if (success) onCategoryUpdate();

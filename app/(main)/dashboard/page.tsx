@@ -9,6 +9,7 @@ import PayModal from '@/app/components/Pay/PayModal';
 import CategoryTransactionsModal from '@/app/components/CategoryTransactionsModal';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useUser } from '@/app/contexts/UserContext';
+import { tapHaptic } from '@/app/lib/haptics';
 
 const DashboardPage = () => {
   const { user } = useUser();
@@ -292,6 +293,7 @@ const DashboardPage = () => {
                             <button
                               type="button"
                               onClick={() => {
+                                tapHaptic();
                                 setPayCategoryName(categoryName);
                                 setPayBudgetLeft(budget.left);
                                 setPayCategoryId(budget.categoryId);
@@ -299,20 +301,21 @@ const DashboardPage = () => {
                               }}
                               className="py-2.5 text-xs font-medium rounded-lg border border-border text-foreground hover:bg-accent/10 hover:border-accent transition-colors flex items-center justify-center gap-1.5 min-h-[44px]"
                             >
-                              <span aria-hidden>💳</span>
-                              Pay
+                              <span aria-hidden>✏️</span>
+                              Log
                             </button>
                             <button
                               type="button"
-                              onClick={() =>
+                              onClick={() => {
+                                tapHaptic();
                                 setTxModal({
                                   categoryId: budget.categoryId,
                                   categoryName,
                                   categoryIcon: getCategoryIcon(budget.categoryId),
-                                })
-                              }
+                                });
+                              }}
                               className="py-2.5 text-xs font-medium rounded-lg border border-border text-foreground hover:bg-muted/60 transition-colors flex items-center justify-center gap-1.5 min-h-[44px]"
-                              aria-label={`View pay activity for ${categoryName}`}
+                              aria-label={`View transactions for ${categoryName}`}
                             >
                               <svg
                                 className="h-4 w-4 shrink-0 text-muted-foreground"
@@ -328,7 +331,7 @@ const DashboardPage = () => {
                                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
                                 />
                               </svg>
-                              <span className="truncate">Activity</span>
+                              <span className="truncate">Transactions</span>
                             </button>
                           </div>
                       </div>
@@ -394,7 +397,10 @@ const DashboardPage = () => {
             {txModal && user && (
               <CategoryTransactionsModal
                 isOpen
-                onClose={() => setTxModal(null)}
+                onClose={() => {
+                  setTxModal(null);
+                  fetchData();
+                }}
                 userId={user.id}
                 categoryId={txModal.categoryId}
                 categoryName={txModal.categoryName}
